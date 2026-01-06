@@ -4633,8 +4633,10 @@
                         const newCount = jobMatches ? jobMatches.length : 0;
                         if (newCount > jobCount) {
                             jobCount = newCount;
+                            const bytesLoaded = jsonText.length;
+                            const mbLoaded = (bytesLoaded / (1024 * 1024)).toFixed(1);
                             document.getElementById('chart-loading').innerHTML =
-                                `<span class="loading">Loading... ${jobCount} jobs</span>`;
+                                `<span class="loading">Loading... ${jobCount} jobs (${mbLoaded} MB)</span>`;
                         }
 
                         // Try to render UI early once we have enough data for the default time range
