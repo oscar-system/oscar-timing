@@ -1968,6 +1968,20 @@
             } else {
                 url.searchParams.delete('l');
             }
+            // Add expanded jobs if any
+            if (expandedJobs.size > 0) {
+                const expandedIndices = [...expandedJobs]
+                    .map(name => jobIndexMap[name])
+                    .filter(idx => idx !== undefined)
+                    .sort((a, b) => a - b);
+                if (expandedIndices.length > 0) {
+                    url.searchParams.set('e', expandedIndices.join('_'));
+                } else {
+                    url.searchParams.delete('e');
+                }
+            } else {
+                url.searchParams.delete('e');
+            }
             history.replaceState(null, '', url);
             saveToLocalStorage();
         }
@@ -2037,6 +2051,16 @@
             if (l !== null && VALID_LINE_TYPES.includes(l)) {
                 lineType = l;
                 document.getElementById('line-type').value = l;
+            }
+
+            // Apply expanded jobs
+            const e = params.get('e');
+            if (e) {
+                expandedJobs.clear();
+                const indices = e.split('_').map(Number).filter(n => !isNaN(n));
+                for (const idx of indices) {
+                    if (jobNameList[idx]) expandedJobs.add(jobNameList[idx]);
+                }
             }
 
             // Apply selection
@@ -4239,6 +4263,7 @@
                 expandedJobs.add(jobName);
             }
             updateStatsTable();
+            updateURL();
         }
 
         function updateSortIndicators() {
