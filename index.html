@@ -3872,7 +3872,7 @@
                     const aggPct = Math.round(aggRate * 100);
                     const aggFailures = allFailed + allTimedOut + allCanceled;
                     // Color: green=100%, yellow>=90%, red<90%
-                    const prColor = aggRate >= 1 ? 'var(--color-success-fg)' : (aggRate >= 0.9 ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
+                    const prColor = aggRate >= 1 ? 'var(--color-success-fg)' : (aggRate >= PASS_RATE_THRESHOLD ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
                     // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts
                     let icons = '';
                     if (aggRate < 0.5) icons += '⚠️';
@@ -3928,7 +3928,7 @@
                     const pct = Math.round(pr.rate * 100);
                     const failures = pr.failed + pr.timedOut + pr.canceled;
                     // Color: green=100%, yellow>=90%, red<90%
-                    const prColor = pr.rate >= 1 ? 'var(--color-success-fg)' : (pr.rate >= 0.9 ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
+                    const prColor = pr.rate >= 1 ? 'var(--color-success-fg)' : (pr.rate >= PASS_RATE_THRESHOLD ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
                     // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts
                     let icons = '';
                     if (pr.rate < 0.5) icons += '⚠️';
@@ -4059,7 +4059,7 @@
                             const hostPct = Math.round(hostRate * 100);
                             const hostFailures = hostFailed + hostTimedOut + hostCanceled;
                             // Color: green=100%, yellow>=90%, red<90%
-                            const hostPrColor = hostRate >= 1 ? 'var(--color-success-fg)' : (hostRate >= 0.9 ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
+                            const hostPrColor = hostRate >= 1 ? 'var(--color-success-fg)' : (hostRate >= PASS_RATE_THRESHOLD ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
                             // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts
                             let hostIcons = '';
                             if (hostRate < 0.5) hostIcons += '⚠️';
@@ -4470,7 +4470,7 @@
                     const failures = pr.failed + pr.timedOut + pr.canceled;
                     // Color: green=100%, yellow>=90%, red<90%
                     let rateClass = 'green';
-                    if (pr.rate < 1) rateClass = pr.rate >= 0.9 ? 'yellow' : 'red';
+                    if (pr.rate < 1) rateClass = pr.rate >= PASS_RATE_THRESHOLD ? 'yellow' : 'red';
                     // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts
                     let icons = '';
                     if (pr.rate < 0.5) icons += '⚠️';
