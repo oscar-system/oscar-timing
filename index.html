@@ -1150,6 +1150,20 @@
         const STORAGE_KEY = 'julia-ci-timing-config';
         const DATA_REFRESH_INTERVAL = 5 * 60 * 1000;  // 5 minutes
         const AGO_UPDATE_INTERVAL = 60 * 1000;        // 1 minute
+        
+        // Data freshness
+        const STALE_DATA_THRESHOLD_DAYS = 3;  // Show warning if data older than 3 days (matches CI update schedule)
+        const STALE_DATA_THRESHOLD_MS = STALE_DATA_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
+        
+        // Pass rate tracking
+        const PASS_RATE_DAYS = 14;  // Track pass rate over last 14 days
+        const PASS_RATE_THRESHOLD = 0.9;  // Below 90% shows warning
+        const PASS_RATE_MIN_RUNS = 3;  // Need at least 3 runs to show warning
+        
+        // Statistical significance
+        const TREND_SIGNIFICANCE_P_VALUE = 0.05;  // p-value threshold for statistical significance
+        const TREND_SIGNIFICANCE_R_SQUARED = 0.1;  // R² threshold (trend must explain >10% of variance)
+        const TREND_MIN_POINTS = 3;  // Minimum data points required for trend analysis
 
         // === State ===
         let chart = null;
@@ -1377,7 +1391,7 @@
          * @returns {Object|null} Trend analysis object with slope, pValue, rSquared, percentChange, etc., or null if insufficient data
          */
         function computeTrend(runs) {
-            if (runs.length < 3) return null;
+            if (runs.length < TREND_MIN_POINTS) return null;
 
             // Convert to numeric: x = timestamp (days), y = duration (seconds)
             const points = runs.map(r => ({
@@ -1430,7 +1444,7 @@
 
             // Require both statistical significance AND meaningful effect size
             // R² > 0.1 means the trend explains at least 10% of variance
-            const isSignificant = pValue < 0.05 && rSquared > 0.1;
+            const isSignificant = pValue < TREND_SIGNIFICANCE_P_VALUE && rSquared > TREND_SIGNIFICANCE_R_SQUARED;
 
             return {
                 slope,           // seconds per day
@@ -1550,7 +1564,7 @@
         }
 
         function formatTrend(trend, lineColor = null, percentageMode = false, yAxisID = 'y') {
-            if (!trend || trend.n < 3) {
+            if (!trend || trend.n < TREND_MIN_POINTS) {
                 return { html: '<span style="color: var(--color-fg-muted)" title="Not enough data points">—</span>', trendData: null };
             }
 
@@ -1707,10 +1721,6 @@
         }
 
         // Calculate pass rate for a job over the last N days
-        const PASS_RATE_DAYS = 14;
-        const PASS_RATE_THRESHOLD = 0.9;  // Below 90% shows warning
-        const PASS_RATE_MIN_RUNS = 3;     // Need at least 3 runs to show warning
-
         function getJobPassRate(jobData) {
             const cutoff = new Date();
             cutoff.setDate(cutoff.getDate() - PASS_RATE_DAYS);
@@ -4803,13 +4813,12 @@
          * @param {string} generatedAt - ISO timestamp string of when data was generated
          */
         function checkStaleData(generatedAt) {
-            const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
             const dataTime = new Date(generatedAt).getTime();
             const now = Date.now();
             const age = now - dataTime;
 
             const warningBanner = document.getElementById('stale-data-warning');
-            if (age > THREE_DAYS_MS) {
+            if (age > STALE_DATA_THRESHOLD_MS) {
                 warningBanner.classList.add('visible');
             } else {
                 warningBanner.classList.remove('visible');
