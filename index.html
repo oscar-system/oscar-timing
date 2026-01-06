@@ -305,6 +305,15 @@
             cursor: pointer;
             user-select: none;
         }
+        .section-header-actions {
+            display: none; /* Hidden by default, shown on mobile */
+            gap: 4px;
+        }
+        .section-header-actions .btn-small {
+            padding: 2px 8px;
+            font-size: 10px;
+            min-height: auto;
+        }
         .section-header::after {
             content: ' ▼';
             font-size: 10px;
@@ -817,7 +826,12 @@
 
             /* Collapsible sections on mobile */
             .section-header {
-                display: block;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .section-header-actions {
+                display: flex;
             }
             .job-matrix-wrapper .collapsible-content {
                 max-height: 280px;
@@ -1186,7 +1200,13 @@
                 </div>
             </div>
             <div class="job-list-section">
-                <div class="section-header" id="section-jobs" onclick="toggleSection(this)">Jobs (<span id="job-count-mobile">0/0</span>)</div>
+                <div class="section-header" id="section-jobs" onclick="toggleSection(this)">
+                    Jobs (<span id="job-count-mobile">0/0</span>)
+                    <span class="section-header-actions" onclick="event.stopPropagation()">
+                        <button class="btn btn-small" onclick="selectAllJobs()" aria-label="Select all jobs">All</button>
+                        <button class="btn btn-small" onclick="deselectAllJobs()" aria-label="Deselect all jobs">None</button>
+                    </span>
+                </div>
                 <div class="collapsible-content">
                     <div class="job-list-header">
                         <span>Jobs (<span id="job-count">0/0</span>)</span>
