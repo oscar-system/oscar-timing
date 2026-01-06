@@ -1005,7 +1005,7 @@
 </head>
 <body>
     <div class="toolbar" role="toolbar" aria-label="Dashboard controls">
-        <h1><img src="favicon.svg" alt="Julia CI Timing" class="julia-logo"><a href="https://github.com/JuliaLang" target="_blank" style="color: var(--color-fg-muted); text-decoration: none; font-weight: 400;">JuliaLang</a> / <a href="https://github.com/JuliaLang/julia" target="_blank" style="color: inherit; text-decoration: none; font-weight: 600;">julia</a> <span style="color: var(--color-fg-muted); font-weight: 300;">|</span> CI Timing</h1>
+        <h1><img src="favicon.svg" alt="Julia CI Timing" class="julia-logo"><a href="https://github.com/JuliaLang" target="_blank" rel="noopener noreferrer" style="color: var(--color-fg-muted); text-decoration: none; font-weight: 400;">JuliaLang</a> / <a href="https://github.com/JuliaLang/julia" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none; font-weight: 600;">julia</a> <span style="color: var(--color-fg-muted); font-weight: 300;">|</span> CI Timing</h1>
         <button class="btn" id="btn-all" onclick="selectAllJobs()" aria-label="Select all jobs">All</button>
         <button class="btn" id="btn-none" onclick="deselectAllJobs()" aria-label="Deselect all jobs">None</button>
         <select class="time-select" id="time-range" onchange="setTimeRange(this.value)" aria-label="Time range">
@@ -1045,8 +1045,8 @@
             <div class="checkbox-dropdown-menu" id="host-filter-menu"></div>
         </div>
         <span class="updated" id="last-updated" aria-live="polite"></span>
-        <a href="https://github.com/JuliaCI/julia-ci-timing/commit/__BUILD_COMMIT__" target="_blank" class="updated" id="build-commit" title="Site build commit" style="text-decoration: none;">__BUILD_COMMIT_SHORT__</a>
-        <a href="https://github.com/JuliaCI/julia-ci-timing" target="_blank" class="btn btn-link" aria-label="View source on GitHub">GitHub</a>
+        <a href="https://github.com/JuliaCI/julia-ci-timing/commit/__BUILD_COMMIT__" target="_blank" rel="noopener noreferrer" class="updated" id="build-commit" title="Site build commit" style="text-decoration: none;">__BUILD_COMMIT_SHORT__</a>
+        <a href="https://github.com/JuliaCI/julia-ci-timing" target="_blank" rel="noopener noreferrer" class="btn btn-link" aria-label="View source on GitHub">GitHub</a>
     </div>
 
     <div class="warning-banner" id="stale-data-warning" role="alert">
@@ -1054,7 +1054,7 @@
         <div class="warning-banner-content">
             <div class="warning-banner-title">Data May Be Stale</div>
             <div class="warning-banner-text">
-                This site hasn't been updated in more than 3 days. Please <a href="https://github.com/JuliaCI/julia-ci-timing/issues/new" target="_blank">report an issue</a> to let us know.
+                This site hasn't been updated in more than 3 days. Please <a href="https://github.com/JuliaCI/julia-ci-timing/issues/new" target="_blank" rel="noopener noreferrer">report an issue</a> to let us know.
             </div>
         </div>
         <button class="warning-banner-close" onclick="document.getElementById('stale-data-warning').classList.remove('visible')" aria-label="Close warning">×</button>
@@ -1993,12 +1993,12 @@
                 // Check if base is significantly older (more than 50 builds behind)
                 const buildDiff = comparisonData.build - comparisonData.base;
                 if (buildDiff > 50) {
-                    title.innerHTML = `Comparing <a href="${prLink}" target="_blank">PR #${comparisonData.pr}</a> (<a href="${buildLink}" target="_blank">build ${comparisonData.build}</a>). Note: the base of the PR branch is old, at <a href="${baseLink}" target="_blank">build ${comparisonData.base}</a>`;
+                    title.innerHTML = `Comparing <a href="${prLink}" target="_blank" rel="noopener noreferrer">PR #${comparisonData.pr}</a> (<a href="${buildLink}" target="_blank" rel="noopener noreferrer">build ${comparisonData.build}</a>). Note: the base of the PR branch is old, at <a href="${baseLink}" target="_blank" rel="noopener noreferrer">build ${comparisonData.base}</a>`;
                 } else {
-                    title.innerHTML = `Comparing <a href="${prLink}" target="_blank">PR #${comparisonData.pr}</a> (<a href="${buildLink}" target="_blank">build ${comparisonData.build}</a>)`;
+                    title.innerHTML = `Comparing <a href="${prLink}" target="_blank" rel="noopener noreferrer">PR #${comparisonData.pr}</a> (<a href="${buildLink}" target="_blank" rel="noopener noreferrer">build ${comparisonData.build}</a>)`;
                 }
             } else {
-                title.innerHTML = `Comparing <a href="${buildLink}" target="_blank">build ${comparisonData.build}</a> vs <a href="${baseLink}" target="_blank">base ${comparisonData.base}</a>`;
+                title.innerHTML = `Comparing <a href="${buildLink}" target="_blank" rel="noopener noreferrer">build ${comparisonData.build}</a> vs <a href="${baseLink}" target="_blank" rel="noopener noreferrer">base ${comparisonData.base}</a>`;
             }
 
             // Calculate summary stats
@@ -3115,7 +3115,7 @@
                     : `https://app.codecov.io/gh/JuliaLang/julia/commit/${fullCommit}`;
                 const serviceName = isCoveralls ? 'Coveralls' : 'Codecov';
                 document.getElementById('popup-coverage-value').innerHTML =
-                    `<strong>${meta.coverage.toFixed(2)}%</strong> on <a href="${coverageUrl}" target="_blank">${serviceName}</a>`;
+                    `<strong>${meta.coverage.toFixed(2)}%</strong> on <a href="${coverageUrl}" target="_blank" rel="noopener noreferrer">${serviceName}</a>`;
             } else {
                 // Regular job popup
                 const state = meta.state || 'passed';
