@@ -4698,12 +4698,13 @@
                 }
             } catch (err) {
                 console.error('Failed to load data:', err);
-                document.getElementById('chart-loading').innerHTML = '<span class="error">Failed to load data</span>';
-                document.getElementById('job-matrix').innerHTML = '<div class="error">Failed to load</div>';
-                document.getElementById('job-list').innerHTML = '<div class="error">Failed to load jobs</div>';
+                const retryBtn = '<button class="btn" onclick="location.reload()" style="margin-left: 8px;">Retry</button>';
+                document.getElementById('chart-loading').innerHTML = `<span class="error">Failed to load data</span>${retryBtn}`;
+                document.getElementById('job-matrix').innerHTML = `<div class="error">Failed to load ${retryBtn}</div>`;
+                document.getElementById('job-list').innerHTML = `<div class="error">Failed to load jobs ${retryBtn}</div>`;
                 document.getElementById('stats-tbody').innerHTML = `
                     <tr><td colspan="10" class="error">
-                        Failed to load data. Run <code>julia fetch_timing.jl</code> to generate data.
+                        Failed to load data. Run <code>julia fetch_timing.jl</code> to generate data. ${retryBtn}
                     </td></tr>
                 `;
             }
