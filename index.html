@@ -1982,6 +1982,18 @@
             } else {
                 url.searchParams.delete('e');
             }
+            // Add excluded states if different from default (canceled only)
+            const defaultExcluded = new Set(['canceled']);
+            const isDefaultStates = excludedStates.size === defaultExcluded.size &&
+                [...excludedStates].every(s => defaultExcluded.has(s));
+            if (!isDefaultStates) {
+                // Encode as which states are visible (inverse of excluded)
+                const allStates = ['passed', 'failed', 'timed_out', 'canceled'];
+                const visible = allStates.filter(s => !excludedStates.has(s));
+                url.searchParams.set('st', visible.join('_'));
+            } else {
+                url.searchParams.delete('st');
+            }
             history.replaceState(null, '', url);
             saveToLocalStorage();
         }
@@ -2061,6 +2073,29 @@
                 for (const idx of indices) {
                     if (jobNameList[idx]) expandedJobs.add(jobNameList[idx]);
                 }
+            }
+
+            // Apply state filter
+            const st = params.get('st');
+            if (st !== null) {
+                const allStates = ['passed', 'failed', 'timed_out', 'canceled'];
+                const visibleStates = st ? st.split('_').filter(s => allStates.includes(s)) : [];
+                excludedStates.clear();
+                for (const state of allStates) {
+                    if (!visibleStates.includes(state)) {
+                        excludedStates.add(state);
+                    }
+                }
+                // Sync checkbox UI
+                const menu = document.getElementById('state-filter-menu');
+                if (menu) {
+                    const checkboxes = menu.querySelectorAll('input[type="checkbox"]');
+                    const stateOrder = ['passed', 'failed', 'timed_out', 'canceled'];
+                    checkboxes.forEach((cb, i) => {
+                        cb.checked = !excludedStates.has(stateOrder[i]);
+                    });
+                }
+                updateStateFilterLabel();
             }
 
             // Apply selection
@@ -2294,6 +2329,7 @@
             updateStateFilterLabel();
             updateChart();
             updateStatsTable();
+            updateURL();
         }
 
         function updateStateFilterLabel() {
