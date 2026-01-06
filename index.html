@@ -1282,7 +1282,12 @@
             return result;
         }
 
-        // Generate distinct colors for jobs using golden ratio for better distribution
+        /**
+         * Generate visually distinct colors for jobs using golden ratio distribution.
+         * Colors are in HSL format for perceptually uniform distribution.
+         * @param {number} count - Number of distinct colors to generate
+         * @returns {Array<string>} Array of HSL color strings
+         */
         function generateColors(count) {
             const colors = [];
             const goldenRatio = 0.618033988749895;
@@ -1342,7 +1347,12 @@
             return remainMins > 0 ? `${hours}h ${remainMins}m` : `${hours}h`;
         }
 
-        // Standard normal CDF approximation (for z-score to p-value conversion)
+        /**
+         * Standard normal cumulative distribution function approximation.
+         * Uses Abramowitz and Stegun's polynomial approximation.
+         * @param {number} z - Z-score value
+         * @returns {number} Cumulative probability P(Z ≤ z)
+         */
         function normalCDF(z) {
             const a1 =  0.254829592;
             const a2 = -0.284496736;
@@ -1360,8 +1370,12 @@
             return 0.5 * (1.0 + sign * y);
         }
 
-        // Compute trend using linear regression with statistical significance
-        // Returns: { slope, slopePerDay, pValue, significant, direction }
+        /**
+         * Compute trend using linear regression with statistical significance testing.
+         * Uses t-distribution for p-value calculation and requires R² > 0.1 for significance.
+         * @param {Array<Object>} runs - Array of run objects with duration and date properties
+         * @returns {Object|null} Trend analysis object with slope, pValue, rSquared, percentChange, etc., or null if insufficient data
+         */
         function computeTrend(runs) {
             if (runs.length < 3) return null;
 
@@ -1745,6 +1759,11 @@
             jobNameList.forEach((name, i) => jobIndexMap[name] = i);
         }
 
+        /**
+         * Encode current job selection into compact URL-safe string.
+         * Uses short codes for matrix cells, special groups, and job indices.
+         * @returns {string} Encoded selection string for URL parameter
+         */
         function encodeSelection() {
             const parts = [];
             const coveredJobs = new Set();
@@ -1782,6 +1801,11 @@
             return parts.join('.');
         }
 
+        /**
+         * Decode job selection from URL parameter string.
+         * @param {string} param - Encoded selection string from URL
+         * @returns {Object|null} Object with {matrix, special, indices} arrays, or null if invalid
+         */
         function decodeSelection(param) {
             if (!param) return null;
             const selections = { matrix: [], special: [], indices: [] };
@@ -2333,7 +2357,12 @@
             return { group: 'other', type: 'other' };
         }
 
-        // Compute temporal moving average over windowDays
+        /**
+         * Compute temporal moving average with centered window.
+         * @param {Array<Object>} points - Array of {x: Date, y: number} data points
+         * @param {number} windowDays - Size of averaging window in days
+         * @returns {Array<Object>} Smoothed data points with same structure as input
+         */
         function computeMovingAverage(points, windowDays) {
             if (points.length === 0) return [];
             const windowMs = windowDays * 24 * 60 * 60 * 1000;
@@ -4769,7 +4798,10 @@
             matrixContainer.innerHTML = html;
         }
 
-        // Check if data is stale (older than 3 days)
+        /**
+         * Check if data is stale (older than 3 days) and show/hide warning banner.
+         * @param {string} generatedAt - ISO timestamp string of when data was generated
+         */
         function checkStaleData(generatedAt) {
             const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
             const dataTime = new Date(generatedAt).getTime();
