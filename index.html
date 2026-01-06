@@ -1069,7 +1069,7 @@
         .header-separator { color: var(--color-fg-muted); font-weight: 300; }
         .link-no-underline { text-decoration: none; }
         .aggregate-row { font-weight: 600; border-bottom: 2px solid var(--color-border-default); }
-        .special-header { text-align: center; padding-top: 8px; }
+        .matrix-table th.special-header { text-align: center; padding-top: 8px; }
         .special-buttons { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; justify-content: center; }
         .special-buttons-cell { padding: 0; }
         .separator-row td { padding: 4px; border-bottom: 1px solid var(--color-border-muted); }
@@ -2424,9 +2424,10 @@
 
         function classifyJob(name) {
             const lower = name.toLowerCase();
-            if (lower.includes('juliasyntax')) return { group: 'juliasyntax', type: 'test' };
+            // Pipeline jobs first (launch/unlock)
             if (lower.includes('launch')) return { group: 'pipeline', type: 'pipeline' };
             if (lower.includes('unlock')) return { group: 'pipeline', type: 'pipeline' };
+            if (lower.includes('juliasyntax')) return { group: 'juliasyntax', type: 'test' };
             if (lower.includes('upload test results')) return { group: 'upload-results', type: 'upload' };
             if (lower.includes('upload docs')) return { group: 'docs', type: 'upload' };
             if (lower.includes('doctest') || lower.includes('pdf_docs')) return { group: 'docs', type: 'test' };
@@ -4419,7 +4420,8 @@
                         return pr && pr.total >= PASS_RATE_MIN_RUNS && pr.rate < PASS_RATE_THRESHOLD;
                     });
                     const warnIcon = hasIssue ? ' ⚠️' : '';
-                    html += `<button class="btn btn-special" data-special="${group}" onclick="toggleSpecialGroup('${group}')">${specialLabels[group]} (${jobs.length})${warnIcon}</button>`;
+                    const jobList = jobs.map(({ name }) => convertEmojiText(name)).join('\n');
+                    html += `<button class="btn btn-special" data-special="${group}" onclick="toggleSpecialGroup('${group}')" title="${jobList}">${specialLabels[group]} (${jobs.length})${warnIcon}</button>`;
                 }
             }
             html += '</div></td></tr>';
