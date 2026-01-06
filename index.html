@@ -305,24 +305,25 @@
             cursor: pointer;
             user-select: none;
         }
-        .section-header-actions {
-            display: none; /* Hidden by default, shown on mobile */
-            gap: 4px;
-        }
-        .section-header-actions .btn-small {
-            padding: 2px 8px;
-            font-size: 10px;
-            min-height: auto;
-        }
-        .section-header::after {
+        .section-header-text::after {
             content: ' ▼';
             font-size: 10px;
             transition: transform 0.2s ease;
             display: inline-block;
             margin-left: 4px;
         }
-        .section-header.collapsed::after {
+        .section-header.collapsed .section-header-text::after {
             transform: rotate(-90deg);
+        }
+        .section-header-actions {
+            display: none; /* Hidden by default, shown on mobile */
+            gap: 4px;
+            margin-left: auto;
+        }
+        .section-header-actions .btn-small {
+            padding: 4px 10px;
+            font-size: 11px;
+            min-height: 24px;
         }
         .collapsible-content {
             transition: max-height 0.25s ease, opacity 0.2s ease;
@@ -1194,17 +1195,17 @@
     <main class="main">
         <aside class="sidebar" aria-label="Job selection">
             <div class="job-matrix-wrapper">
-                <div class="section-header" id="section-matrix" onclick="toggleSection(this)">Platform Matrix</div>
+                <div class="section-header" id="section-matrix" onclick="toggleSection(this)"><span class="section-header-text">Platform Matrix</span></div>
                 <div class="collapsible-content">
                     <div class="job-matrix" id="job-matrix" role="grid" aria-label="Platform and test type matrix"><div class="loading">Loading...</div></div>
                 </div>
             </div>
             <div class="job-list-section">
                 <div class="section-header" id="section-jobs" onclick="toggleSection(this)">
-                    Jobs (<span id="job-count-mobile">0/0</span>)
+                    <span class="section-header-text">Jobs (<span id="job-count-mobile">0/0</span>)</span>
                     <span class="section-header-actions" onclick="event.stopPropagation()">
-                        <button class="btn btn-small" onclick="selectAllJobs()" aria-label="Select all jobs">All</button>
-                        <button class="btn btn-small" onclick="deselectAllJobs()" aria-label="Deselect all jobs">None</button>
+                        <button class="btn btn-small" onclick="selectAllJobs()">All</button>
+                        <button class="btn btn-small" onclick="deselectAllJobs()">None</button>
                     </span>
                 </div>
                 <div class="collapsible-content">
