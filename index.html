@@ -27,6 +27,7 @@
             --color-fg-subtle: #6e7781;
             --color-accent-fg: #0969da;
             --color-accent-emphasis: #0969da;
+            --color-accent-subtle: rgba(9,105,218,0.15);
             --color-success-fg: #1a7f37;
             --color-success-subtle: rgba(74,194,107,0.15);
             --color-danger-fg: #d1242f;
@@ -513,6 +514,8 @@
             font-size: 11px;
         }
         .stats-bar tr:hover { background: var(--color-neutral-muted); }
+        .stats-bar tr.chart-hover-highlight,
+        .stats-bar tr.chart-hover-highlight:hover { background: rgba(9,105,218,0.2) !important; }
         .stats-bar tr.expandable { cursor: pointer; }
         .stats-bar tr.expandable td:first-child::before {
             content: '▶';
@@ -2738,6 +2741,7 @@
                         tension: 0.2,
                         pointRadius: pointRadii,
                         pointHoverRadius: 3,
+                        pointHitRadius: 10,
                         pointBackgroundColor: pointColors,
                         pointBorderColor: pointColors,
                         pointStyle: pointStyles,
@@ -2770,6 +2774,7 @@
                         showLine: false,
                         pointRadius: pointRadii,
                         pointHoverRadius: 3,
+                        pointHitRadius: 10,
                         pointStyle: pointStyles,
                         pointBorderColor: pointColors,
                         pointBackgroundColor: pointColors,
@@ -3299,6 +3304,22 @@
                             const meta = chartMetadata[key];
                             if (meta) showPopup(meta);
                         }
+                    },
+                    onHover: (evt, elements) => {
+                        if (elements.length > 0) {
+                            const el = elements[0];
+                            const key = `${el.datasetIndex}-${el.index}`;
+                            const meta = chartMetadata[key];
+                            if (meta && meta.job) {
+                                const dataset = chart.data.datasets[el.datasetIndex];
+                                const yAxisID = dataset.yAxisID || 'y';
+                                highlightYAxis(yAxisID);
+                                highlightStatsRow(meta.job);
+                            }
+                        } else {
+                            clearYAxisHighlight();
+                            clearStatsRowHighlight();
+                        }
                     }
                 }
             });
@@ -3490,6 +3511,110 @@
                 smallTimedOutMarkerCache[color] = createSmallTimedOutMarker(color);
             }
             return smallTimedOutMarkerCache[color];
+        }
+
+        // Y-axis only highlighting (for chart hover)
+        let yAxisHighlightActive = false;
+        function highlightYAxis(yAxisID) {
+            if (!chart) return;
+
+            const mutedAxisColor = 'rgba(128, 128, 128, 0.4)';
+
+            // Store original values on first highlight
+            if (!yAxisHighlightActive) {
+                if (chart.options.scales.y?.title) {
+                    chart.options.scales.y.title._originalColor = chart.options.scales.y.title.color;
+                }
+                if (chart.options.scales.y?.ticks) {
+                    chart.options.scales.y.ticks._originalColor = chart.options.scales.y.ticks.color;
+                }
+                if (chart.options.scales.y2?.title) {
+                    chart.options.scales.y2.title._originalColor = chart.options.scales.y2.title.color;
+                }
+                if (chart.options.scales.y2?.ticks) {
+                    chart.options.scales.y2.ticks._originalColor = chart.options.scales.y2.ticks.color;
+                }
+                yAxisHighlightActive = true;
+            }
+
+            // Highlight the relevant y-axis
+            if (chart.options.scales.y) {
+                const isHighlighted = yAxisID === 'y';
+                if (chart.options.scales.y.title) {
+                    chart.options.scales.y.title.color = isHighlighted
+                        ? chart.options.scales.y.title._originalColor
+                        : mutedAxisColor;
+                }
+                if (chart.options.scales.y.ticks) {
+                    chart.options.scales.y.ticks.color = isHighlighted
+                        ? chart.options.scales.y.ticks._originalColor
+                        : mutedAxisColor;
+                }
+            }
+            if (chart.options.scales.y2) {
+                const isHighlighted = yAxisID === 'y2';
+                if (chart.options.scales.y2.title) {
+                    chart.options.scales.y2.title.color = isHighlighted
+                        ? chart.options.scales.y2.title._originalColor
+                        : mutedAxisColor;
+                }
+                if (chart.options.scales.y2.ticks) {
+                    chart.options.scales.y2.ticks.color = isHighlighted
+                        ? chart.options.scales.y2.ticks._originalColor
+                        : mutedAxisColor;
+                }
+            }
+            chart.update();
+        }
+
+        function clearYAxisHighlight() {
+            if (!chart || !yAxisHighlightActive) return;
+
+            if (chart.options.scales.y?.title?._originalColor !== undefined) {
+                chart.options.scales.y.title.color = chart.options.scales.y.title._originalColor;
+            }
+            if (chart.options.scales.y?.ticks?._originalColor !== undefined) {
+                chart.options.scales.y.ticks.color = chart.options.scales.y.ticks._originalColor;
+            }
+            if (chart.options.scales.y2?.title?._originalColor !== undefined) {
+                chart.options.scales.y2.title.color = chart.options.scales.y2.title._originalColor;
+            }
+            if (chart.options.scales.y2?.ticks?._originalColor !== undefined) {
+                chart.options.scales.y2.ticks.color = chart.options.scales.y2.ticks._originalColor;
+            }
+            yAxisHighlightActive = false;
+            chart.update();
+        }
+
+        // Stats row highlighting (for chart hover)
+        let highlightedStatsRow = null;
+        function highlightStatsRow(jobName) {
+            clearStatsRowHighlight();
+            // Find row by iterating (safer than CSS selector with special chars)
+            const rows = document.querySelectorAll('#stats-tbody tr[data-job]');
+            for (const row of rows) {
+                if (row.dataset.job === jobName) {
+                    row.classList.add('chart-hover-highlight');
+                    highlightedStatsRow = row;
+                    // Scroll into view if not visible
+                    const wrapper = document.getElementById('stats-wrapper');
+                    if (wrapper) {
+                        const rowRect = row.getBoundingClientRect();
+                        const wrapperRect = wrapper.getBoundingClientRect();
+                        if (rowRect.top < wrapperRect.top || rowRect.bottom > wrapperRect.bottom) {
+                            row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        function clearStatsRowHighlight() {
+            if (highlightedStatsRow) {
+                highlightedStatsRow.classList.remove('chart-hover-highlight');
+                highlightedStatsRow = null;
+            }
         }
 
         // Highlight a specific job/agent in the chart, de-emphasizing others
@@ -4067,6 +4192,7 @@
                 const hasMultipleHosts = agents.length > 1;
 
                 const row = document.createElement('tr');
+                row.dataset.job = jobName;
                 if (hasMultipleHosts) {
                     row.className = `expandable${isExpanded ? ' expanded' : ''}`;
                     row.onclick = () => toggleJobExpand(jobName);
@@ -4271,6 +4397,7 @@
                 const coverallsStats = computeCoverageStats(coverallsData);
                 if (coverallsStats) {
                     const row = document.createElement('tr');
+                    row.dataset.job = 'Coveralls Coverage';
                     row.onmouseenter = () => highlightChartDataset('#3F5EFB', null, 'y2');
                     row.onmouseleave = () => clearChartHighlight();
                     const trendResult = formatTrend(coverallsStats.trend, '#3F5EFB', true, 'y2');
@@ -4296,6 +4423,7 @@
                 const codecovStats = computeCoverageStats(codecovData);
                 if (codecovStats) {
                     const row = document.createElement('tr');
+                    row.dataset.job = 'Codecov Coverage';
                     row.onmouseenter = () => highlightChartDataset('#F01F7A', null, 'y2');
                     row.onmouseleave = () => clearChartHighlight();
                     const trendResult = formatTrend(codecovStats.trend, '#F01F7A', true, 'y2');
