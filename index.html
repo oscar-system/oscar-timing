@@ -1784,27 +1784,35 @@
             regressionLineDataset = null;
         }
 
-        // Event delegation for trend cell hover
-        document.addEventListener('mouseenter', (e) => {
-            if (!e.target?.closest) return;
-            const cell = e.target.closest('.trend-cell');
-            if (cell && cell.dataset.trend) {
+        // Track currently hovered trend cell to properly handle mouseover/mouseout
+        let currentTrendCell = null;
+
+        // Event delegation for trend cell hover using mouseover/mouseout (which bubble)
+        document.addEventListener('mouseover', (e) => {
+            const cell = e.target.closest?.('.trend-cell');
+            if (cell && cell !== currentTrendCell && cell.dataset.trend) {
+                currentTrendCell = cell;
                 try {
                     const trendData = JSON.parse(cell.dataset.trend.replace(/&#39;/g, "'"));
                     showRegressionLine(trendData, trendData.lineColor);
                 } catch (err) {
                     // Ignore parse errors
                 }
-            }
-        }, true);
-
-        document.addEventListener('mouseleave', (e) => {
-            if (!e.target?.closest) return;
-            const cell = e.target.closest('.trend-cell');
-            if (cell) {
+            } else if (!cell && currentTrendCell) {
+                currentTrendCell = null;
                 hideRegressionLine();
             }
-        }, true);
+        });
+
+        document.addEventListener('mouseout', (e) => {
+            if (!currentTrendCell) return;
+            // Check if we're leaving to an element outside the current trend cell
+            const relatedCell = e.relatedTarget?.closest?.('.trend-cell');
+            if (relatedCell !== currentTrendCell) {
+                currentTrendCell = null;
+                hideRegressionLine();
+            }
+        });
 
         function filterRunsByState(runs, cutoff, maxCutoff = null, filterHosts = true) {
             return runs.filter(r => {
