@@ -1216,16 +1216,16 @@
         const STORAGE_KEY = 'julia-ci-timing-config';
         const DATA_REFRESH_INTERVAL = 5 * 60 * 1000;  // 5 minutes
         const AGO_UPDATE_INTERVAL = 60 * 1000;        // 1 minute
-        
+
         // Data freshness
         const STALE_DATA_THRESHOLD_DAYS = 3;  // Show warning if data older than 3 days (matches CI update schedule)
         const STALE_DATA_THRESHOLD_MS = STALE_DATA_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
-        
+
         // Pass rate tracking
         const PASS_RATE_DAYS = 14;  // Track pass rate over last 14 days
         const PASS_RATE_THRESHOLD = 0.9;  // Below 90% shows warning
         const PASS_RATE_MIN_RUNS = 3;  // Need at least 3 runs to show warning
-        
+
         // Statistical significance
         const TREND_SIGNIFICANCE_P_VALUE = 0.05;  // p-value threshold for statistical significance
         const TREND_SIGNIFICANCE_R_SQUARED = 0.1;  // R² threshold (trend must explain >10% of variance)
@@ -3621,7 +3621,7 @@
             }
             // Keyboard shortcuts (when not typing in an input)
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
-            
+
             if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
                 e.preventDefault();
                 toggleShortcutsHelp();
