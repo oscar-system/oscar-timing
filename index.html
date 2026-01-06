@@ -129,6 +129,10 @@
             line-height: 20px;
         }
         .btn:hover { background: var(--color-btn-hover-bg); }
+        .btn-icon {
+            padding: 4px 8px;
+            line-height: normal;
+        }
         .btn-primary {
             background: var(--color-accent-emphasis);
             border-color: var(--color-accent-emphasis);
@@ -341,6 +345,18 @@
             font-weight: 600;
             color: var(--color-fg-muted);
             flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .job-list-actions {
+            display: flex;
+            gap: 4px;
+        }
+        .btn-small {
+            padding: 2px 6px;
+            font-size: 10px;
+            line-height: 14px;
         }
         .job-list {
             padding: 0;
@@ -759,11 +775,6 @@
                 padding: 10px 12px; /* Larger touch targets */
                 font-size: 13px;
             }
-            #btn-all, #btn-none {
-                flex: 0 0 auto;
-                min-width: 40px;
-                padding: 6px 10px;
-            }
             .toolbar .updated {
                 font-size: 9px;
                 margin-left: auto;
@@ -1070,8 +1081,6 @@
 <body>
     <div class="toolbar" role="toolbar" aria-label="Dashboard controls">
         <h1><img src="favicon.svg" alt="Julia CI Timing" class="julia-logo"><a href="https://github.com/JuliaLang" target="_blank" rel="noopener noreferrer" class="link-muted">JuliaLang</a> / <a href="https://github.com/JuliaLang/julia" target="_blank" rel="noopener noreferrer" class="link-inherit">julia</a> <span class="header-separator">|</span> CI Timing</h1>
-        <button class="btn" id="btn-all" onclick="selectAllJobs()" aria-label="Select all jobs">All</button>
-        <button class="btn" id="btn-none" onclick="deselectAllJobs()" aria-label="Deselect all jobs">None</button>
         <select class="time-select" id="time-range" onchange="setTimeRange(this.value)" aria-label="Time range">
             <option value="custom" disabled>Custom</option>
             <option value="7">Last 7 days</option>
@@ -1108,9 +1117,9 @@
             </button>
             <div class="checkbox-dropdown-menu" id="host-filter-menu"></div>
         </div>
+        <button class="btn btn-icon" onclick="toggleShortcutsHelp()" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">?</button>
         <span class="updated" id="last-updated" aria-live="polite"></span>
         <a href="https://github.com/JuliaCI/julia-ci-timing/commit/__BUILD_COMMIT__" target="_blank" rel="noopener noreferrer" class="updated link-no-underline" id="build-commit" title="Site build commit">__BUILD_COMMIT_SHORT__</a>
-        <button class="btn" onclick="toggleShortcutsHelp()" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">⌨️</button>
         <a href="https://github.com/JuliaCI/julia-ci-timing" target="_blank" rel="noopener noreferrer" class="btn btn-link" aria-label="View source on GitHub">GitHub</a>
     </div>
 
@@ -1179,7 +1188,13 @@
             <div class="job-list-section">
                 <div class="section-header" id="section-jobs" onclick="toggleSection(this)">Jobs (<span id="job-count-mobile">0/0</span>)</div>
                 <div class="collapsible-content">
-                    <div class="job-list-header">Jobs (<span id="job-count">0/0</span>)</div>
+                    <div class="job-list-header">
+                        <span>Jobs (<span id="job-count">0/0</span>)</span>
+                        <span class="job-list-actions">
+                            <button class="btn btn-small" id="btn-all" onclick="selectAllJobs()" aria-label="Select all jobs">All</button>
+                            <button class="btn btn-small" id="btn-none" onclick="deselectAllJobs()" aria-label="Deselect all jobs">None</button>
+                        </span>
+                    </div>
                     <div class="job-list" id="job-list" role="listbox" aria-label="Available jobs"><div class="loading">Loading jobs...</div></div>
                 </div>
             </div>
