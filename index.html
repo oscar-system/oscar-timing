@@ -849,6 +849,67 @@
             }
         }
 
+        /* Warning banner for stale data */
+        .warning-banner {
+            background: var(--color-danger-subtle);
+            border: 2px solid var(--color-danger-fg);
+            border-radius: 6px;
+            margin: 8px 16px;
+            padding: 12px 16px;
+            display: none;
+            gap: 12px;
+            align-items: center;
+        }
+        .warning-banner.visible {
+            display: flex;
+        }
+        .warning-banner-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .warning-banner-content {
+            flex: 1;
+        }
+        .warning-banner-title {
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--color-fg-default);
+            margin-bottom: 4px;
+        }
+        .warning-banner-text {
+            font-size: 13px;
+            color: var(--color-fg-default);
+        }
+        .warning-banner-text a {
+            color: var(--color-accent-fg);
+            text-decoration: underline;
+            font-weight: 500;
+        }
+        .warning-banner-text a:hover {
+            text-decoration: none;
+        }
+        .warning-banner-close {
+            background: transparent;
+            border: none;
+            font-size: 24px;
+            font-weight: 300;
+            line-height: 1;
+            color: var(--color-fg-muted);
+            cursor: pointer;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+        .warning-banner-close:hover {
+            background: var(--color-neutral-muted);
+            color: var(--color-fg-default);
+        }
+
         /* Comparison mode banner */
         .comparison-banner {
             border: 2px solid var(--color-attention-emphasis);
@@ -986,6 +1047,17 @@
         <span class="updated" id="last-updated" aria-live="polite"></span>
         <a href="https://github.com/JuliaCI/julia-ci-timing/commit/__BUILD_COMMIT__" target="_blank" class="updated" id="build-commit" title="Site build commit" style="text-decoration: none;">__BUILD_COMMIT_SHORT__</a>
         <a href="https://github.com/JuliaCI/julia-ci-timing" target="_blank" class="btn btn-link" aria-label="View source on GitHub">GitHub</a>
+    </div>
+
+    <div class="warning-banner" id="stale-data-warning" role="alert">
+        <div class="warning-banner-icon">⚠️</div>
+        <div class="warning-banner-content">
+            <div class="warning-banner-title">Data May Be Stale</div>
+            <div class="warning-banner-text">
+                This site hasn't been updated in more than 3 days. Please <a href="https://github.com/JuliaCI/julia-ci-timing/issues/new" target="_blank">report an issue</a> to let us know.
+            </div>
+        </div>
+        <button class="warning-banner-close" onclick="document.getElementById('stale-data-warning').classList.remove('visible')" aria-label="Close warning">×</button>
     </div>
 
     <div class="comparison-banner" id="comparison-banner" role="alert">
@@ -4557,6 +4629,9 @@
                 updatedEl.textContent = `Updated ${timeAgo(data.generated_at)}`;
                 updatedEl.title = data.generated_at;
 
+                // Check if data is stale (more than 3 days old)
+                checkStaleData(data.generated_at);
+
                 if (!uiRendered) {
                     populateJobSelector();
                     document.getElementById('chart-loading').style.display = 'none';
@@ -4693,6 +4768,21 @@
             matrixContainer.innerHTML = html;
         }
 
+        // Check if data is stale (older than 3 days)
+        function checkStaleData(generatedAt) {
+            const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+            const dataTime = new Date(generatedAt).getTime();
+            const now = Date.now();
+            const age = now - dataTime;
+
+            const warningBanner = document.getElementById('stale-data-warning');
+            if (age > THREE_DAYS_MS) {
+                warningBanner.classList.add('visible');
+            } else {
+                warningBanner.classList.remove('visible');
+            }
+        }
+
         async function refreshData() {
             try {
                 const resp = await fetch('data/timing_summary.json');
@@ -4705,6 +4795,7 @@
                     const updatedEl = document.getElementById('last-updated');
                     updatedEl.textContent = `Updated ${timeAgo(data.generated_at)}`;
                     updatedEl.title = data.generated_at;
+                    checkStaleData(data.generated_at);
                     updateChart();
                     updateStatsTable();
                 } else {
