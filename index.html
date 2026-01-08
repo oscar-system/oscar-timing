@@ -3314,7 +3314,7 @@
                                 const dataset = chart.data.datasets[el.datasetIndex];
                                 const yAxisID = dataset.yAxisID || 'y';
                                 highlightYAxis(yAxisID);
-                                highlightStatsRow(meta.job);
+                                highlightStatsRow(meta.job, meta.agent);
                             }
                         } else {
                             clearYAxisHighlight();
@@ -3588,12 +3588,13 @@
 
         // Stats row highlighting (for chart hover)
         let highlightedStatsRow = null;
-        function highlightStatsRow(jobName) {
+        let highlightedHostRow = null;
+        function highlightStatsRow(jobName, agent = null) {
             clearStatsRowHighlight();
             // Find row by iterating (safer than CSS selector with special chars)
             const rows = document.querySelectorAll('#stats-tbody tr[data-job]');
             for (const row of rows) {
-                if (row.dataset.job === jobName) {
+                if (row.dataset.job === jobName && !row.dataset.agent) {
                     row.classList.add('chart-hover-highlight');
                     highlightedStatsRow = row;
                     // Scroll into view if not visible
@@ -3608,12 +3609,27 @@
                     break;
                 }
             }
+            // Also highlight the host row if job is expanded and agent is specified
+            if (agent && expandedJobs.has(jobName)) {
+                const hostRows = document.querySelectorAll('#stats-tbody tr.host-row[data-job][data-agent]');
+                for (const hostRow of hostRows) {
+                    if (hostRow.dataset.job === jobName && hostRow.dataset.agent === agent) {
+                        hostRow.classList.add('chart-hover-highlight');
+                        highlightedHostRow = hostRow;
+                        break;
+                    }
+                }
+            }
         }
 
         function clearStatsRowHighlight() {
             if (highlightedStatsRow) {
                 highlightedStatsRow.classList.remove('chart-hover-highlight');
                 highlightedStatsRow = null;
+            }
+            if (highlightedHostRow) {
+                highlightedHostRow.classList.remove('chart-hover-highlight');
+                highlightedHostRow = null;
             }
         }
 
@@ -4322,6 +4338,8 @@
 
                         const hostRow = document.createElement('tr');
                         hostRow.className = 'host-row';
+                        hostRow.dataset.job = jobName;
+                        hostRow.dataset.agent = agent;
                         hostRow.onmouseenter = () => highlightChartDataset(color, agent);
                         hostRow.onmouseleave = () => clearChartHighlight();
                         const hostTrendResult = formatTrend(hostTrend, hostColor);
