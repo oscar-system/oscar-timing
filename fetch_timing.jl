@@ -133,7 +133,8 @@ function extract_job_timings(builds, pipeline::String)
         author::String,
         state::String,
         agent::String,
-        pipeline::String
+        pipeline::String,
+        retry::Int
     }}}()
 
     for build in builds
@@ -154,6 +155,9 @@ function extract_job_timings(builds, pipeline::String)
             ""
         end
         author = isnothing(author) ? "" : String(author)
+
+        # Track retry counts per job name within this build
+        job_retry_counts = Dict{String, Int}()
 
         jobs = get(build, :jobs, [])
         for job in jobs
@@ -181,6 +185,10 @@ function extract_job_timings(builds, pipeline::String)
                 ""
             end
 
+            # Track retry number (0 = first attempt, 1+ = retries)
+            retry_num = get(job_retry_counts, name, 0)
+            job_retry_counts[name] = retry_num + 1
+
             entry = (
                 commit = commit,
                 build_number = build_num,
@@ -190,7 +198,8 @@ function extract_job_timings(builds, pipeline::String)
                 author = author,
                 state = job_state,
                 agent = agent_hostname,
-                pipeline = pipeline
+                pipeline = pipeline,
+                retry = retry_num
             )
 
             if haskey(job_timings, name)
@@ -422,19 +431,22 @@ function generate_json_output(job_timings; output_dir="data", coverage_data=Dict
                 "duration" => round(t.duration_seconds, digits=1),
                 "message" => t.message,
                 "pipeline" => t.pipeline,
+                "retry" => t.retry,
                 "state" => t.state
             )
             for t in new_timings
         ]
 
-        # Merge with existing records (by build number to dedupe)
+        # Merge with existing records (by build+retry to dedupe, supporting retries)
         existing_job = get(existing_jobs, Symbol(name), nothing)
         if existing_job !== nothing
             existing_recent = get(existing_job, :recent, [])
-            new_builds = Set(r["build"] for r in new_records)
+            # Use (build, retry) tuple to identify unique job runs
+            new_keys = Set((r["build"], get(r, "retry", 0)) for r in new_records)
             for old in existing_recent
                 build = get(old, :build, nothing)
-                if build !== nothing && build ∉ new_builds
+                retry = get(old, :retry, 0)
+                if build !== nothing && (build, retry) ∉ new_keys
                     push!(new_records, SortedDict(
                         "agent" => get(old, :agent, ""),
                         "author" => get(old, :author, ""),
@@ -444,6 +456,7 @@ function generate_json_output(job_timings; output_dir="data", coverage_data=Dict
                         "duration" => get(old, :duration, 0.0),
                         "message" => get(old, :message, ""),
                         "pipeline" => get(old, :pipeline, "julia-master"),
+                        "retry" => retry,
                         "state" => get(old, :state, "passed")
                     ))
                 end
@@ -452,8 +465,8 @@ function generate_json_output(job_timings; output_dir="data", coverage_data=Dict
 
         isempty(new_records) && continue
 
-        # Sort by date descending and compute stats
-        sorted = sort(new_records, by=r->r["date"], rev=true)
+        # Sort by date descending, then by retry (so retries appear after original)
+        sorted = sort(new_records, by=r->(r["date"], -get(r, "retry", 0)), rev=true)
         durations = [r["duration"] for r in sorted]
         stats = (
             count = length(durations),

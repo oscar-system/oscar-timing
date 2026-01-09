@@ -1165,6 +1165,7 @@
             <div class="popup-info">
                 <div><span class="label">Job:</span> <span id="popup-job"></span></div>
                 <div><span class="label">Status:</span> <span id="popup-state"></span></div>
+                <div id="popup-retry-row" style="display: none;"><span class="label">Attempt:</span> <span id="popup-retry"></span></div>
                 <div><span class="label">Duration:</span> <span id="popup-duration"></span></div>
                 <div><span class="label">Agent:</span> <span id="popup-agent"></span></div>
                 <div><span class="label">Date:</span> <span id="popup-date"></span></div>
@@ -1855,7 +1856,7 @@
             const cutoff = new Date();
             cutoff.setDate(cutoff.getDate() - PASS_RATE_DAYS);
 
-            let total = 0, passed = 0, failed = 0, timedOut = 0, canceled = 0;
+            let total = 0, passed = 0, failed = 0, timedOut = 0, canceled = 0, retries = 0;
             for (const run of jobData.recent) {
                 const date = new Date(run.date);
                 if (date < cutoff) continue;
@@ -1865,8 +1866,10 @@
                 else if (state === 'failed') failed++;
                 else if (state === 'timed_out') timedOut++;
                 else if (state === 'canceled') canceled++;
+                // Count retries (retry > 0 means this is a retry attempt)
+                if (run.retry > 0) retries++;
             }
-            return { total, passed, failed, timedOut, canceled, rate: total > 0 ? passed / total : 1 };
+            return { total, passed, failed, timedOut, canceled, retries, rate: total > 0 ? passed / total : 1 };
         }
 
         // Cache pass rates for all jobs
@@ -2626,6 +2629,7 @@
                         x: date,
                         y: run.duration,
                         state: runState,
+                        retry: run.retry || 0,
                         meta: {
                             job: jobName,
                             commit: run.commit,
@@ -2635,7 +2639,9 @@
                             message: run.message,
                             author: run.author,
                             state: runState,
-                            agent: run.agent || ''
+                            agent: run.agent || '',
+                            retry: run.retry || 0,
+                            pipeline: run.pipeline || 'julia-master'
                         }
                     });
                 }
@@ -2723,11 +2729,19 @@
                 const pointStyles = points.map((p, i) => {
                     if (p.state === 'timed_out') return getTimedOutMarker(pointColors[i]);
                     if (p.state === 'failed' || p.state === 'canceled') return 'crossRot';
+                    // Use rectRot (diamond) for retry attempts to make them visually distinct
+                    if (p.retry > 0) return 'rectRot';
                     return 'circle';
                 });
-                // Smaller points on narrow screens
+                // Smaller points on narrow screens; larger for retries to make them visible
                 const isMobile = window.innerWidth <= 480;
-                const pointRadii = points.map(p => isFailedState(p.state) ? (isMobile ? 3.5 : 5) : (isMobile ? 1.5 : 2));
+                const pointRadii = points.map(p => {
+                    if (isFailedState(p.state)) return isMobile ? 3.5 : 5;
+                    if (p.retry > 0) return isMobile ? 3 : 4;  // Slightly larger for retries
+                    return isMobile ? 1.5 : 2;
+                });
+                // Add border to retry points
+                const pointBorderWidths = points.map(p => p.retry > 0 ? 2 : 0);
 
                 if (lineType === 'raw') {
                     // Single dataset with line and points
@@ -2744,6 +2758,7 @@
                         pointHitRadius: 10,
                         pointBackgroundColor: pointColors,
                         pointBorderColor: pointColors,
+                        pointBorderWidth: pointBorderWidths,
                         pointStyle: pointStyles,
                         spanGaps: true,
                         yAxisID: 'y'
@@ -2778,6 +2793,7 @@
                         pointStyle: pointStyles,
                         pointBorderColor: pointColors,
                         pointBackgroundColor: pointColors,
+                        pointBorderWidth: pointBorderWidths,
                         yAxisID: 'y'
                     });
                     // Also track metadata for points dataset
@@ -3374,6 +3390,18 @@
                 stateEl.innerHTML = `${stateIcon} ${stateText}`;
                 stateEl.style.color = failed ? 'var(--color-danger-fg)' :
                                       state === 'passed' ? 'var(--color-success-fg)' : 'inherit';
+
+                // Show retry info if this is a retry attempt
+                const retryRow = document.getElementById('popup-retry-row');
+                const retryEl = document.getElementById('popup-retry');
+                const retryNum = meta.retry || 0;
+                if (retryNum > 0) {
+                    retryRow.style.display = '';
+                    retryEl.innerHTML = `<span style="color: var(--color-attention-fg)">🔄 Retry #${retryNum}</span>`;
+                } else {
+                    retryRow.style.display = 'none';
+                }
+
                 document.getElementById('popup-duration').textContent = formatDuration(meta.duration);
                 document.getElementById('popup-agent').textContent = meta.agent || '(unknown)';
                 document.getElementById('popup-date').textContent = meta.date;
@@ -3970,13 +3998,14 @@
                 const agents = Object.entries(agentCounts).sort((a, b) => b[1] - a[1]);  // Sort by count desc
 
                 // Calculate pass rate from all runs in range (ignoring state filter)
-                let prPassed = 0, prFailed = 0, prTimedOut = 0, prCanceled = 0;
+                let prPassed = 0, prFailed = 0, prTimedOut = 0, prCanceled = 0, prRetries = 0;
                 for (const r of allRunsInRange) {
                     const state = r.state || 'passed';
                     if (state === 'passed') prPassed++;
                     else if (state === 'failed') prFailed++;
                     else if (state === 'timed_out') prTimedOut++;
                     else if (state === 'canceled') prCanceled++;
+                    if (r.retry > 0) prRetries++;
                 }
                 const prTotal = allRunsInRange.length;
                 const pr = prTotal > 0 ? {
@@ -3985,6 +4014,7 @@
                     failed: prFailed,
                     timedOut: prTimedOut,
                     canceled: prCanceled,
+                    retries: prRetries,
                     rate: prPassed / prTotal
                 } : null;
 
@@ -4095,7 +4125,7 @@
             // Add "All" aggregate row when multiple jobs selected
             if (jobStats.length > 1) {
                 // Aggregate pass rate counts
-                let allPassed = 0, allFailed = 0, allTimedOut = 0, allCanceled = 0, allTotal = 0;
+                let allPassed = 0, allFailed = 0, allTimedOut = 0, allCanceled = 0, allRetries = 0, allTotal = 0;
                 let allN = 0;
 
                 for (const stat of jobStats) {
@@ -4104,6 +4134,7 @@
                         allFailed += stat.pr.failed;
                         allTimedOut += stat.pr.timedOut;
                         allCanceled += stat.pr.canceled;
+                        allRetries += stat.pr.retries || 0;
                         allTotal += stat.pr.total;
                     }
                     allN += stat.n;
@@ -4136,14 +4167,16 @@
                     const aggFailures = allFailed + allTimedOut + allCanceled;
                     // Color: green=100%, yellow>=90%, red<90%
                     const prColor = aggRate >= 1 ? 'var(--color-success-fg)' : (aggRate >= PASS_RATE_THRESHOLD ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
-                    // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts
+                    // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts, 🔄 if retries present
                     let icons = '';
                     if (aggRate < 0.5) icons += '⚠️';
                     if (aggFailures > 0 && allTimedOut / aggFailures > 0.5) icons += '⏳';
+                    if (allRetries > 0) icons += '🔄';
                     const parts = [];
                     if (allFailed > 0) parts.push(`${allFailed} failed`);
                     if (allTimedOut > 0) parts.push(`${allTimedOut} timed out`);
                     if (allCanceled > 0) parts.push(`${allCanceled} canceled`);
+                    if (allRetries > 0) parts.push(`${allRetries} retries`);
                     const breakdown = parts.length > 0 ? parts.join(', ') : 'all passed';
                     aggPassRateHtml = `<span style="color: ${prColor}" title="${breakdown} out of ${allTotal} total runs">${aggPct}%${icons ? ' ' + icons : ''}</span>`;
                 }
@@ -4192,14 +4225,16 @@
                     const failures = pr.failed + pr.timedOut + pr.canceled;
                     // Color: green=100%, yellow>=90%, red<90%
                     const prColor = pr.rate >= 1 ? 'var(--color-success-fg)' : (pr.rate >= PASS_RATE_THRESHOLD ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
-                    // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts
+                    // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts, 🔄 if retries present
                     let icons = '';
                     if (pr.rate < 0.5) icons += '⚠️';
                     if (failures > 0 && pr.timedOut / failures > 0.5) icons += '⏳';
+                    if (pr.retries > 0) icons += '🔄';
                     const parts = [];
                     if (pr.failed > 0) parts.push(`${pr.failed} failed`);
                     if (pr.timedOut > 0) parts.push(`${pr.timedOut} timed out`);
                     if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
+                    if (pr.retries > 0) parts.push(`${pr.retries} retries`);
                     const breakdown = parts.length > 0 ? parts.join(', ') : 'all passed';
                     passRateHtml = `<span style="color: ${prColor}" title="${breakdown} out of ${pr.total} in selected range">${pct}%${icons ? ' ' + icons : ''}</span>`;
                 }
@@ -4311,27 +4346,30 @@
                         let hostPrHtml = '<span class="text-muted">—</span>';
                         const hostTotal = allHostRuns.length;
                         if (hostTotal > 0) {
-                            let hostPassed = 0, hostFailed = 0, hostTimedOut = 0, hostCanceled = 0;
+                            let hostPassed = 0, hostFailed = 0, hostTimedOut = 0, hostCanceled = 0, hostRetries = 0;
                             for (const run of allHostRuns) {
                                 const state = run.state || 'passed';
                                 if (state === 'passed') hostPassed++;
                                 else if (state === 'failed') hostFailed++;
                                 else if (state === 'timed_out') hostTimedOut++;
                                 else if (state === 'canceled') hostCanceled++;
+                                if (run.retry > 0) hostRetries++;
                             }
                             const hostRate = hostPassed / hostTotal;
                             const hostPct = Math.round(hostRate * 100);
                             const hostFailures = hostFailed + hostTimedOut + hostCanceled;
                             // Color: green=100%, yellow>=90%, red<90%
                             const hostPrColor = hostRate >= 1 ? 'var(--color-success-fg)' : (hostRate >= PASS_RATE_THRESHOLD ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
-                            // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts
+                            // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts, 🔄 if retries present
                             let hostIcons = '';
                             if (hostRate < 0.5) hostIcons += '⚠️';
                             if (hostFailures > 0 && hostTimedOut / hostFailures > 0.5) hostIcons += '⏳';
+                            if (hostRetries > 0) hostIcons += '🔄';
                             const parts = [];
                             if (hostFailed > 0) parts.push(`${hostFailed} failed`);
                             if (hostTimedOut > 0) parts.push(`${hostTimedOut} timed out`);
                             if (hostCanceled > 0) parts.push(`${hostCanceled} canceled`);
+                            if (hostRetries > 0) parts.push(`${hostRetries} retries`);
                             const breakdown = parts.length > 0 ? parts.join(', ') : 'all passed';
                             hostPrHtml = `<span style="color: ${hostPrColor}" title="${breakdown} out of ${hostTotal} in selected range">${hostPct}%${hostIcons ? ' ' + hostIcons : ''}</span>`;
                         }
