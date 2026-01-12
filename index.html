@@ -4329,14 +4329,22 @@
                     const baseShift = 20;
                     const baseHue = getHueFromColor(color);
                     const maxShift = baseShift * getPerceptualHueMultiplier(baseHue);
-                    const hostDots = agents.map(([agent, count], i) => {
-                        const hueShift = agents.length > 1
-                            ? -maxShift + (2 * maxShift * i / (agents.length - 1))
+                    const maxDotsShown = 10;
+                    const displayAgents = agents.length > maxDotsShown ? agents.slice(0, maxDotsShown) : agents;
+                    const hostDots = displayAgents.map(([agent, count], i) => {
+                        const hueShift = displayAgents.length > 1
+                            ? -maxShift + (2 * maxShift * i / (displayAgents.length - 1))
                             : 0;
                         const hostColor = shiftHue(color, hueShift);
                         return `<span class="color-dot" style="background: ${hostColor}" title="${agent}: ${count} runs"></span>`;
                     }).join('');
-                    hostsHtml = hostDots;
+                    if (agents.length > maxDotsShown) {
+                        const hiddenCount = agents.length - maxDotsShown;
+                        const hiddenAgents = agents.slice(maxDotsShown).map(([a, c]) => `${a}: ${c} runs`).join('\n');
+                        hostsHtml = hostDots + `<span class="text-muted" title="${escapeHtml(hiddenAgents)}">+${hiddenCount}</span>`;
+                    } else {
+                        hostsHtml = hostDots;
+                    }
                 }
 
                 let passRateHtml = '<span class="text-muted">—</span>';
