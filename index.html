@@ -397,6 +397,22 @@
             font-size: 9px;
             font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
         }
+        .job-group-header {
+            padding: 8px 12px 4px;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--color-fg-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: var(--color-canvas-subtle);
+            border-top: 1px solid var(--color-border-default);
+            border-bottom: 1px solid var(--color-border-default);
+            margin-top: 4px;
+        }
+        .job-group-header:first-child {
+            margin-top: 0;
+            border-top: none;
+        }
         .color-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
         .coverage-logo { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
         .bk-emoji { height: 1em; width: 1em; vertical-align: -0.1em; display: inline; }
@@ -1882,6 +1898,63 @@
                 if (run.retry > 0) retries++;
             }
             return { total, passed, failed, timedOut, canceled, retries, rate: total > 0 ? passed / total : 1 };
+        }
+
+        // Check if a job has recent failures or timeouts
+        // Returns object with: { hasFailure, hasTimeout, failedCount, timedOutCount, totalCount, tooltipFailure, tooltipTimeout }
+        // Shows issues if:
+        // 1. There was a failure/timeout in the last 24 hours, OR
+        // 2. There was a failure/timeout in the last 3 runs AND at least one run is within PASS_RATE_DAYS
+        function hasRecentFailure(jobData) {
+            if (!jobData.recent || jobData.recent.length === 0) {
+                return { hasFailure: false, hasTimeout: false, failedCount: 0, timedOutCount: 0, totalCount: 0, tooltipFailure: '', tooltipTimeout: '' };
+            }
+
+            const now = new Date();
+            const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            const recentCutoff = new Date();
+            recentCutoff.setDate(recentCutoff.getDate() - PASS_RATE_DAYS);
+
+            // Check last 3 runs
+            const lastThreeRuns = jobData.recent.slice(0, Math.min(3, jobData.recent.length));
+            
+            // First, check if the job has any runs within the recent cutoff period
+            const hasRecentRuns = lastThreeRuns.some(run => new Date(run.date) >= recentCutoff);
+            if (!hasRecentRuns) {
+                // Job hasn't run recently, don't flag as having current issues
+                return { hasFailure: false, hasTimeout: false, failedCount: 0, timedOutCount: 0, totalCount: 0, tooltipFailure: '', tooltipTimeout: '' };
+            }
+
+            let failedCount = 0;
+            let timedOutCount = 0;
+            let hasFailure = false;
+            let hasTimeout = false;
+            
+            for (const run of lastThreeRuns) {
+                const state = run.state || 'passed';
+                const runDate = new Date(run.date);
+                
+                // Check if this run failed
+                if (state === 'failed') {
+                    failedCount++;
+                    // Show warning if within 24h OR if this is in the last 3 runs and recent enough
+                    if (runDate >= last24h || runDate >= recentCutoff) {
+                        hasFailure = true;
+                    }
+                }
+                // Check if this run timed out
+                else if (state === 'timed_out') {
+                    timedOutCount++;
+                    // Show warning if within 24h OR if this is in the last 3 runs and recent enough
+                    if (runDate >= last24h || runDate >= recentCutoff) {
+                        hasTimeout = true;
+                    }
+                }
+            }
+
+            const tooltipFailure = hasFailure ? `Currently failing: ${failedCount}/${lastThreeRuns.length} recent runs failed` : '';
+            const tooltipTimeout = hasTimeout ? `Currently timing out: ${timedOutCount}/${lastThreeRuns.length} recent runs timed-out` : '';
+            return { hasFailure, hasTimeout, failedCount, timedOutCount, totalCount: lastThreeRuns.length, tooltipFailure, tooltipTimeout };
         }
 
         // Cache pass rates for all jobs
@@ -4192,10 +4265,22 @@
                     const aggFailures = allFailed + allTimedOut + allCanceled;
                     // Color: green=100%, yellow>=90%, red<90%
                     const prColor = aggRate >= 1 ? 'var(--color-success-fg)' : (aggRate >= PASS_RATE_THRESHOLD ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
-                    // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts, 🔄 if retries present
+                    // Check if any job has recent failures or timeouts for warning icons
+                    let hasAnyRecentFailure = false;
+                    let hasAnyRecentTimeout = false;
+                    for (const stat of jobStats) {
+                        const job = data.jobs[stat.jobName];
+                        if (job) {
+                            const issueInfo = hasRecentFailure(job);
+                            if (issueInfo.hasFailure) hasAnyRecentFailure = true;
+                            if (issueInfo.hasTimeout) hasAnyRecentTimeout = true;
+                            if (hasAnyRecentFailure && hasAnyRecentTimeout) break;
+                        }
+                    }
+                    // Icons: ⚠️ if any job has recent failure, ⏳ if any job has recent timeout, 🔄 if retries present
                     let icons = '';
-                    if (aggRate < 0.5) icons += '⚠️';
-                    if (aggFailures > 0 && allTimedOut / aggFailures > 0.5) icons += '⏳';
+                    if (hasAnyRecentFailure) icons += '⚠️';
+                    if (hasAnyRecentTimeout) icons += '⏳';
                     if (allRetries > 0) icons += '🔄';
                     const parts = [];
                     if (allFailed > 0) parts.push(`${allFailed} failed`);
@@ -4250,17 +4335,26 @@
                     const failures = pr.failed + pr.timedOut + pr.canceled;
                     // Color: green=100%, yellow>=90%, red<90%
                     const prColor = pr.rate >= 1 ? 'var(--color-success-fg)' : (pr.rate >= PASS_RATE_THRESHOLD ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
-                    // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts, 🔄 if retries present
+                    // Check for recent failures and timeouts
+                    const job = data.jobs[jobName];
+                    const issueInfo = job ? hasRecentFailure(job) : { hasFailure: false, hasTimeout: false, tooltipFailure: '', tooltipTimeout: '' };
+                    // Icons: ⚠️ if recent failure, ⏳ if recent timeout, 🔄 if retries present
                     let icons = '';
-                    if (pr.rate < 0.5) icons += '⚠️';
-                    if (failures > 0 && pr.timedOut / failures > 0.5) icons += '⏳';
+                    if (issueInfo.hasFailure) icons += '⚠️';
+                    if (issueInfo.hasTimeout) icons += '⏳';
                     if (pr.retries > 0) icons += '🔄';
                     const parts = [];
                     if (pr.failed > 0) parts.push(`${pr.failed} failed`);
                     if (pr.timedOut > 0) parts.push(`${pr.timedOut} timed out`);
                     if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
                     if (pr.retries > 0) parts.push(`${pr.retries} retries`);
-                    const breakdown = parts.length > 0 ? parts.join(', ') : 'all passed';
+                    let breakdown = parts.length > 0 ? parts.join(', ') : 'all passed';
+                    if (issueInfo.hasFailure) {
+                        breakdown += `\n${issueInfo.tooltipFailure}`;
+                    }
+                    if (issueInfo.hasTimeout) {
+                        breakdown += `\n${issueInfo.tooltipTimeout}`;
+                    }
                     passRateHtml = `<span style="color: ${prColor}" title="${breakdown} out of ${pr.total} in selected range">${pct}%${icons ? ' ' + icons : ''}</span>`;
                 }
 
@@ -4690,15 +4784,38 @@
                 for (const type of typeOrder) {
                     const jobs = jobMatrix[platform][type];
                     const count = jobs.length;
-                    // Check if any job in this cell has low pass rate
-                    const hasIssue = jobs.some(({ name }) => {
-                        const pr = jobPassRates[name];
-                        return pr && pr.total >= PASS_RATE_MIN_RUNS && pr.rate < PASS_RATE_THRESHOLD;
-                    });
+                    // Check if any job in this cell has recent failures/timeouts
+                    let failureTooltips = [];
+                    let timeoutTooltips = [];
+                    let hasFailure = false;
+                    let hasTimeout = false;
+                    
+                    for (const { name } of jobs) {
+                        const job = data.jobs[name];
+                        if (job) {
+                            const issueInfo = hasRecentFailure(job);
+                            if (issueInfo.hasFailure) {
+                                failureTooltips.push(`${name}: ${issueInfo.failedCount}/${issueInfo.totalCount}`);
+                                hasFailure = true;
+                            }
+                            if (issueInfo.hasTimeout) {
+                                timeoutTooltips.push(`${name}: ${issueInfo.timedOutCount}/${issueInfo.totalCount}`);
+                                hasTimeout = true;
+                            }
+                        }
+                    }
+                    
                     html += `<td class="matrix-cell" data-platform="${platform}" data-type="${type}" onclick="toggleMatrixCell('${platform}', '${type}')">`;
                     if (count > 0) {
                         html += `<span class="job-count">${count}</span>`;
-                        if (hasIssue) html += '<span class="failure-indicator">⚠️</span>';
+                        if (hasFailure) {
+                            const tooltip = `Currently failing:\n${failureTooltips.join('\n')}`;
+                            html += `<span class="failure-indicator" title="${tooltip}">⚠️</span>`;
+                        }
+                        if (hasTimeout) {
+                            const tooltip = `Currently timing out:\n${timeoutTooltips.join('\n')}`;
+                            html += `<span class="failure-indicator" title="${tooltip}">⏳</span>`;
+                        }
                     } else {
                         html += '-';
                     }
@@ -4714,13 +4831,39 @@
             for (const group of specialGroups) {
                 const jobs = specialJobGroups[group];
                 if (jobs.length > 0) {
-                    const hasIssue = jobs.some(({ name }) => {
-                        const pr = jobPassRates[name];
-                        return pr && pr.total >= PASS_RATE_MIN_RUNS && pr.rate < PASS_RATE_THRESHOLD;
-                    });
-                    const warnIcon = hasIssue ? ' ⚠️' : '';
+                    let failureTooltips = [];
+                    let timeoutTooltips = [];
+                    let hasFailure = false;
+                    let hasTimeout = false;
+                    
+                    for (const { name } of jobs) {
+                        const job = data.jobs[name];
+                        if (job) {
+                            const issueInfo = hasRecentFailure(job);
+                            if (issueInfo.hasFailure) {
+                                failureTooltips.push(`${name}: ${issueInfo.failedCount}/${issueInfo.totalCount}`);
+                                hasFailure = true;
+                            }
+                            if (issueInfo.hasTimeout) {
+                                timeoutTooltips.push(`${name}: ${issueInfo.timedOutCount}/${issueInfo.totalCount}`);
+                                hasTimeout = true;
+                            }
+                        }
+                    }
+                    
+                    let warnIcons = '';
+                    if (hasFailure) warnIcons += ' ⚠️';
+                    if (hasTimeout) warnIcons += ' ⏳';
+                    
                     const jobList = jobs.map(({ name }) => convertEmojiText(name)).join('\n');
-                    html += `<button class="btn btn-special" data-special="${group}" onclick="toggleSpecialGroup('${group}')" title="${jobList}">${specialLabels[group]} (${jobs.length})${warnIcon}</button>`;
+                    let tooltip = jobList;
+                    if (hasFailure) {
+                        tooltip += '\n\nCurrently failing:\n' + failureTooltips.join('\n');
+                    }
+                    if (hasTimeout) {
+                        tooltip += '\n\nCurrently timing out:\n' + timeoutTooltips.join('\n');
+                    }
+                    html += `<button class="btn btn-special" data-special="${group}" onclick="toggleSpecialGroup('${group}')" title="${tooltip}">${specialLabels[group]} (${jobs.length})${warnIcons}</button>`;
                 }
             }
             html += '</div></td></tr>';
@@ -4787,43 +4930,117 @@
 
             const getLatestDuration = (job) => job.recent?.[0]?.duration ?? 0;
 
-            const allJobsSorted = Object.entries(data.jobs)
-                .map(([name, job]) => ({ name, job }))
+            // Separate jobs into groups: with current issues and without
+            const allJobs = Object.entries(data.jobs).map(([name, job]) => {
+                const issueInfo = hasRecentFailure(job);
+                const hasIssues = issueInfo.hasFailure || issueInfo.hasTimeout;
+                return { name, job, issueInfo, hasIssues };
+            });
+
+            const jobsWithIssues = allJobs
+                .filter(j => j.hasIssues)
+                .sort((a, b) => getLatestDuration(b.job) - getLatestDuration(a.job));
+            
+            const jobsWithoutIssues = allJobs
+                .filter(j => !j.hasIssues)
                 .sort((a, b) => getLatestDuration(b.job) - getLatestDuration(a.job));
 
-            for (const { name, job } of allJobsSorted) {
-                const color = jobColors[name];
-                const pr = jobPassRates[name];
-                const item = document.createElement('div');
-                item.className = 'job-item' + (selectedJobs.has(name) ? ' selected' : '');
-                item.dataset.job = name;
-                item.onclick = () => toggleJobItem(item, name);
-                let passRateHtml = '';
-                if (pr && pr.total >= PASS_RATE_MIN_RUNS) {
-                    const pct = Math.round(pr.rate * 100);
-                    const failures = pr.failed + pr.timedOut + pr.canceled;
-                    // Color: green=100%, yellow>=90%, red<90%
-                    let rateClass = 'green';
-                    if (pr.rate < 1) rateClass = pr.rate >= PASS_RATE_THRESHOLD ? 'yellow' : 'red';
-                    // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts
-                    let icons = '';
-                    if (pr.rate < 0.5) icons += '⚠️';
-                    if (failures > 0 && pr.timedOut / failures > 0.5) icons += '⏳';
-                    const parts = [];
-                    if (pr.failed > 0) parts.push(`${pr.failed} failed`);
-                    if (pr.timedOut > 0) parts.push(`${pr.timedOut} timed out`);
-                    if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
-                    const tooltip = parts.length > 0 ? `${parts.join(', ')} in last ${PASS_RATE_DAYS} days` : `${pr.passed}/${pr.total} passed in last ${PASS_RATE_DAYS} days`;
-                    passRateHtml = `<span class="pass-rate ${rateClass}" title="${tooltip}">${pct}%${icons ? ' ' + icons : ''}</span>`;
+            // Render jobs with issues first (if any)
+            if (jobsWithIssues.length > 0) {
+                const groupHeader = document.createElement('div');
+                groupHeader.className = 'job-group-header';
+                groupHeader.textContent = `Current Issues (${jobsWithIssues.length})`;
+                listContainer.appendChild(groupHeader);
+
+                for (const { name, job, issueInfo } of jobsWithIssues) {
+                    const color = jobColors[name];
+                    const pr = jobPassRates[name];
+                    const item = document.createElement('div');
+                    item.className = 'job-item' + (selectedJobs.has(name) ? ' selected' : '');
+                    item.dataset.job = name;
+                    item.onclick = () => toggleJobItem(item, name);
+                    let passRateHtml = '';
+                    if (pr && pr.total >= PASS_RATE_MIN_RUNS) {
+                        const pct = Math.round(pr.rate * 100);
+                        const failures = pr.failed + pr.timedOut + pr.canceled;
+                        // Color: green=100%, yellow>=90%, red<90%
+                        let rateClass = 'green';
+                        if (pr.rate < 1) rateClass = pr.rate >= PASS_RATE_THRESHOLD ? 'yellow' : 'red';
+                        // Icons: ⚠️ if recent failure, ⏳ if recent timeout
+                        let icons = '';
+                        if (issueInfo.hasFailure) icons += '⚠️';
+                        if (issueInfo.hasTimeout) icons += '⏳';
+                        const parts = [];
+                        if (pr.failed > 0) parts.push(`${pr.failed} failed`);
+                        if (pr.timedOut > 0) parts.push(`${pr.timedOut} timed out`);
+                        if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
+                        let tooltip = parts.length > 0 ? `${parts.join(', ')} in last ${PASS_RATE_DAYS} days` : `${pr.passed}/${pr.total} passed in last ${PASS_RATE_DAYS} days`;
+                        if (issueInfo.hasFailure) {
+                            tooltip += `\n${issueInfo.tooltipFailure}`;
+                        }
+                        if (issueInfo.hasTimeout) {
+                            tooltip += `\n${issueInfo.tooltipTimeout}`;
+                        }
+                        passRateHtml = `<span class="pass-rate ${rateClass}" title="${tooltip}">${pct}%${icons ? ' ' + icons : ''}</span>`;
+                    }
+                    const latestDuration = getLatestDuration(job);
+                    item.innerHTML = `
+                        <span class="color-dot" style="background: ${color}"></span>
+                        <span class="job-name">${convertEmoji(name)}</span>
+                        ${passRateHtml}
+                        <span class="job-median" title="Latest run">${formatDuration(latestDuration)}</span>
+                    `;
+                    listContainer.appendChild(item);
                 }
-                const latestDuration = getLatestDuration(job);
-                item.innerHTML = `
-                    <span class="color-dot" style="background: ${color}"></span>
-                    <span class="job-name">${convertEmoji(name)}</span>
-                    ${passRateHtml}
-                    <span class="job-median" title="Latest run">${formatDuration(latestDuration)}</span>
-                `;
-                listContainer.appendChild(item);
+            }
+
+            // Render jobs without issues
+            if (jobsWithoutIssues.length > 0) {
+                const groupHeader = document.createElement('div');
+                groupHeader.className = 'job-group-header';
+                groupHeader.textContent = `All Jobs (${jobsWithoutIssues.length})`;
+                listContainer.appendChild(groupHeader);
+
+                for (const { name, job, issueInfo } of jobsWithoutIssues) {
+                    const color = jobColors[name];
+                    const pr = jobPassRates[name];
+                    const item = document.createElement('div');
+                    item.className = 'job-item' + (selectedJobs.has(name) ? ' selected' : '');
+                    item.dataset.job = name;
+                    item.onclick = () => toggleJobItem(item, name);
+                    let passRateHtml = '';
+                    if (pr && pr.total >= PASS_RATE_MIN_RUNS) {
+                        const pct = Math.round(pr.rate * 100);
+                        const failures = pr.failed + pr.timedOut + pr.canceled;
+                        // Color: green=100%, yellow>=90%, red<90%
+                        let rateClass = 'green';
+                        if (pr.rate < 1) rateClass = pr.rate >= PASS_RATE_THRESHOLD ? 'yellow' : 'red';
+                        // Icons: ⚠️ if recent failure, ⏳ if recent timeout
+                        let icons = '';
+                        if (issueInfo.hasFailure) icons += '⚠️';
+                        if (issueInfo.hasTimeout) icons += '⏳';
+                        const parts = [];
+                        if (pr.failed > 0) parts.push(`${pr.failed} failed`);
+                        if (pr.timedOut > 0) parts.push(`${pr.timedOut} timed out`);
+                        if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
+                        let tooltip = parts.length > 0 ? `${parts.join(', ')} in last ${PASS_RATE_DAYS} days` : `${pr.passed}/${pr.total} passed in last ${PASS_RATE_DAYS} days`;
+                        if (issueInfo.hasFailure) {
+                            tooltip += `\n${issueInfo.tooltipFailure}`;
+                        }
+                        if (issueInfo.hasTimeout) {
+                            tooltip += `\n${issueInfo.tooltipTimeout}`;
+                        }
+                        passRateHtml = `<span class="pass-rate ${rateClass}" title="${tooltip}">${pct}%${icons ? ' ' + icons : ''}</span>`;
+                    }
+                    const latestDuration = getLatestDuration(job);
+                    item.innerHTML = `
+                        <span class="color-dot" style="background: ${color}"></span>
+                        <span class="job-name">${convertEmoji(name)}</span>
+                        ${passRateHtml}
+                        <span class="job-median" title="Latest run">${formatDuration(latestDuration)}</span>
+                    `;
+                    listContainer.appendChild(item);
+                }
             }
 
             // Apply comparison mode from URL params
