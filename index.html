@@ -1447,6 +1447,16 @@
             return result;
         }
 
+        // Escape HTML special characters for safe insertion into attributes
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         /**
          * Generate visually distinct colors for jobs using golden ratio distribution.
          * Colors are in HSL format for perceptually uniform distribution.
@@ -1917,7 +1927,7 @@
 
             // Check last 3 runs
             const lastThreeRuns = jobData.recent.slice(0, Math.min(3, jobData.recent.length));
-            
+
             // First, check if the job has any runs within the recent cutoff period
             const hasRecentRuns = lastThreeRuns.some(run => new Date(run.date) >= recentCutoff);
             if (!hasRecentRuns) {
@@ -1929,11 +1939,11 @@
             let timedOutCount = 0;
             let hasFailure = false;
             let hasTimeout = false;
-            
+
             for (const run of lastThreeRuns) {
                 const state = run.state || 'passed';
                 const runDate = new Date(run.date);
-                
+
                 // Check if this run failed
                 if (state === 'failed') {
                     failedCount++;
@@ -4332,7 +4342,6 @@
                 let passRateHtml = '<span class="text-muted">—</span>';
                 if (pr && pr.total > 0) {
                     const pct = Math.round(pr.rate * 100);
-                    const failures = pr.failed + pr.timedOut + pr.canceled;
                     // Color: green=100%, yellow>=90%, red<90%
                     const prColor = pr.rate >= 1 ? 'var(--color-success-fg)' : (pr.rate >= PASS_RATE_THRESHOLD ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
                     // Check for recent failures and timeouts
@@ -4355,7 +4364,7 @@
                     if (issueInfo.hasTimeout) {
                         breakdown += `\n${issueInfo.tooltipTimeout}`;
                     }
-                    passRateHtml = `<span style="color: ${prColor}" title="${breakdown} out of ${pr.total} in selected range">${pct}%${icons ? ' ' + icons : ''}</span>`;
+                    passRateHtml = `<span style="color: ${prColor}" title="${escapeHtml(breakdown + ' out of ' + pr.total + ' in selected range')}">${pct}%${icons ? ' ' + icons : ''}</span>`;
                 }
 
                 const isExpanded = expandedJobs.has(jobName);
@@ -4476,21 +4485,43 @@
                             }
                             const hostRate = hostPassed / hostTotal;
                             const hostPct = Math.round(hostRate * 100);
-                            const hostFailures = hostFailed + hostTimedOut + hostCanceled;
                             // Color: green=100%, yellow>=90%, red<90%
                             const hostPrColor = hostRate >= 1 ? 'var(--color-success-fg)' : (hostRate >= PASS_RATE_THRESHOLD ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
-                            // Icons: ⚠️ if <50% success, ⏳ if >50% of failures are timeouts, 🔄 if retries present
+
+                            // Check for recent failures/timeouts using same logic as hasRecentFailure
+                            const now = new Date();
+                            const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                            const hostLastThree = allHostRuns.slice(0, Math.min(3, allHostRuns.length));
+                            let hostHasFailure = false, hostHasTimeout = false;
+                            let hostRecentFailed = 0, hostRecentTimedOut = 0;
+                            for (const run of hostLastThree) {
+                                const runDate = new Date(run.date);
+                                const state = run.state || 'passed';
+                                if (state === 'failed') {
+                                    hostRecentFailed++;
+                                    if (runDate >= last24h) hostHasFailure = true;
+                                } else if (state === 'timed_out') {
+                                    hostRecentTimedOut++;
+                                    if (runDate >= last24h) hostHasTimeout = true;
+                                }
+                            }
+                            if (hostRecentFailed > 0) hostHasFailure = true;
+                            if (hostRecentTimedOut > 0) hostHasTimeout = true;
+
+                            // Icons: ⚠️ if recent failure, ⏳ if recent timeout, 🔄 if retries present
                             let hostIcons = '';
-                            if (hostRate < 0.5) hostIcons += '⚠️';
-                            if (hostFailures > 0 && hostTimedOut / hostFailures > 0.5) hostIcons += '⏳';
+                            if (hostHasFailure) hostIcons += '⚠️';
+                            if (hostHasTimeout) hostIcons += '⏳';
                             if (hostRetries > 0) hostIcons += '🔄';
                             const parts = [];
                             if (hostFailed > 0) parts.push(`${hostFailed} failed`);
                             if (hostTimedOut > 0) parts.push(`${hostTimedOut} timed out`);
                             if (hostCanceled > 0) parts.push(`${hostCanceled} canceled`);
                             if (hostRetries > 0) parts.push(`${hostRetries} retries`);
-                            const breakdown = parts.length > 0 ? parts.join(', ') : 'all passed';
-                            hostPrHtml = `<span style="color: ${hostPrColor}" title="${breakdown} out of ${hostTotal} in selected range">${hostPct}%${hostIcons ? ' ' + hostIcons : ''}</span>`;
+                            let breakdown = parts.length > 0 ? parts.join(', ') : 'all passed';
+                            if (hostHasFailure) breakdown += `\nCurrently failing: ${hostRecentFailed}/${hostLastThree.length} recent runs failed`;
+                            if (hostHasTimeout) breakdown += `\nCurrently timing out: ${hostRecentTimedOut}/${hostLastThree.length} recent runs timed-out`;
+                            hostPrHtml = `<span style="color: ${hostPrColor}" title="${escapeHtml(breakdown + ' out of ' + hostTotal + ' in selected range')}">${hostPct}%${hostIcons ? ' ' + hostIcons : ''}</span>`;
                         }
 
                         const hostRow = document.createElement('tr');
@@ -4585,7 +4616,6 @@
                         <td><span class="text-muted">—</span></td>
                         ${trendCell}
                         <td>${coverallsStats.median.toFixed(2)}%</td>
-                        <td>${coverallsStats.mean.toFixed(2)}%</td>
                         <td>${coverallsStats.min.toFixed(2)}%</td>
                         <td>${coverallsStats.max.toFixed(2)}%</td>
                         <td>±${coverallsStats.std.toFixed(2)}%</td>
@@ -4611,7 +4641,6 @@
                         <td><span class="text-muted">—</span></td>
                         ${trendCell}
                         <td>${codecovStats.median.toFixed(2)}%</td>
-                        <td>${codecovStats.mean.toFixed(2)}%</td>
                         <td>${codecovStats.min.toFixed(2)}%</td>
                         <td>${codecovStats.max.toFixed(2)}%</td>
                         <td>±${codecovStats.std.toFixed(2)}%</td>
@@ -4789,7 +4818,7 @@
                     let timeoutTooltips = [];
                     let hasFailure = false;
                     let hasTimeout = false;
-                    
+
                     for (const { name } of jobs) {
                         const job = data.jobs[name];
                         if (job) {
@@ -4804,17 +4833,17 @@
                             }
                         }
                     }
-                    
+
                     html += `<td class="matrix-cell" data-platform="${platform}" data-type="${type}" onclick="toggleMatrixCell('${platform}', '${type}')">`;
                     if (count > 0) {
                         html += `<span class="job-count">${count}</span>`;
                         if (hasFailure) {
                             const tooltip = `Currently failing:\n${failureTooltips.join('\n')}`;
-                            html += `<span class="failure-indicator" title="${tooltip}">⚠️</span>`;
+                            html += `<span class="failure-indicator" title="${escapeHtml(tooltip)}">⚠️</span>`;
                         }
                         if (hasTimeout) {
                             const tooltip = `Currently timing out:\n${timeoutTooltips.join('\n')}`;
-                            html += `<span class="failure-indicator" title="${tooltip}">⏳</span>`;
+                            html += `<span class="failure-indicator" title="${escapeHtml(tooltip)}">⏳</span>`;
                         }
                     } else {
                         html += '-';
@@ -4835,7 +4864,7 @@
                     let timeoutTooltips = [];
                     let hasFailure = false;
                     let hasTimeout = false;
-                    
+
                     for (const { name } of jobs) {
                         const job = data.jobs[name];
                         if (job) {
@@ -4850,11 +4879,11 @@
                             }
                         }
                     }
-                    
+
                     let warnIcons = '';
                     if (hasFailure) warnIcons += ' ⚠️';
                     if (hasTimeout) warnIcons += ' ⏳';
-                    
+
                     const jobList = jobs.map(({ name }) => convertEmojiText(name)).join('\n');
                     let tooltip = jobList;
                     if (hasFailure) {
@@ -4863,7 +4892,7 @@
                     if (hasTimeout) {
                         tooltip += '\n\nCurrently timing out:\n' + timeoutTooltips.join('\n');
                     }
-                    html += `<button class="btn btn-special" data-special="${group}" onclick="toggleSpecialGroup('${group}')" title="${tooltip}">${specialLabels[group]} (${jobs.length})${warnIcons}</button>`;
+                    html += `<button class="btn btn-special" data-special="${group}" onclick="toggleSpecialGroup('${group}')" title="${escapeHtml(tooltip)}">${specialLabels[group]} (${jobs.length})${warnIcons}</button>`;
                 }
             }
             html += '</div></td></tr>';
@@ -4940,7 +4969,7 @@
             const jobsWithIssues = allJobs
                 .filter(j => j.hasIssues)
                 .sort((a, b) => getLatestDuration(b.job) - getLatestDuration(a.job));
-            
+
             const jobsWithoutIssues = allJobs
                 .filter(j => !j.hasIssues)
                 .sort((a, b) => getLatestDuration(b.job) - getLatestDuration(a.job));
@@ -4962,7 +4991,6 @@
                     let passRateHtml = '';
                     if (pr && pr.total >= PASS_RATE_MIN_RUNS) {
                         const pct = Math.round(pr.rate * 100);
-                        const failures = pr.failed + pr.timedOut + pr.canceled;
                         // Color: green=100%, yellow>=90%, red<90%
                         let rateClass = 'green';
                         if (pr.rate < 1) rateClass = pr.rate >= PASS_RATE_THRESHOLD ? 'yellow' : 'red';
@@ -4981,7 +5009,7 @@
                         if (issueInfo.hasTimeout) {
                             tooltip += `\n${issueInfo.tooltipTimeout}`;
                         }
-                        passRateHtml = `<span class="pass-rate ${rateClass}" title="${tooltip}">${pct}%${icons ? ' ' + icons : ''}</span>`;
+                        passRateHtml = `<span class="pass-rate ${rateClass}" title="${escapeHtml(tooltip)}">${pct}%${icons ? ' ' + icons : ''}</span>`;
                     }
                     const latestDuration = getLatestDuration(job);
                     item.innerHTML = `
@@ -5011,7 +5039,6 @@
                     let passRateHtml = '';
                     if (pr && pr.total >= PASS_RATE_MIN_RUNS) {
                         const pct = Math.round(pr.rate * 100);
-                        const failures = pr.failed + pr.timedOut + pr.canceled;
                         // Color: green=100%, yellow>=90%, red<90%
                         let rateClass = 'green';
                         if (pr.rate < 1) rateClass = pr.rate >= PASS_RATE_THRESHOLD ? 'yellow' : 'red';
@@ -5030,7 +5057,7 @@
                         if (issueInfo.hasTimeout) {
                             tooltip += `\n${issueInfo.tooltipTimeout}`;
                         }
-                        passRateHtml = `<span class="pass-rate ${rateClass}" title="${tooltip}">${pct}%${icons ? ' ' + icons : ''}</span>`;
+                        passRateHtml = `<span class="pass-rate ${rateClass}" title="${escapeHtml(tooltip)}">${pct}%${icons ? ' ' + icons : ''}</span>`;
                     }
                     const latestDuration = getLatestDuration(job);
                     item.innerHTML = `
