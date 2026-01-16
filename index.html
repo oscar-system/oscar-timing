@@ -421,7 +421,9 @@
         .pass-rate.yellow { color: var(--color-attention-fg); }
         .pass-rate.red { color: var(--color-danger-fg); }
         .failure-indicator { color: var(--color-danger-fg); font-size: 9px; margin-left: 2px; }
+        .breakage-indicator { color: var(--color-severe-fg, #ff6b00); font-weight: bold; }
         .matrix-cell .failure-indicator { position: absolute; top: 1px; right: 2px; font-size: 8px; }
+        .matrix-cell .breakage-indicator { position: absolute; top: 1px; right: 12px; font-size: 9px; }
 
         /* Chart area */
         .content {
@@ -1964,15 +1966,111 @@
 
             const tooltipFailure = hasFailure ? `Currently failing: ${failedCount}/${lastThreeRuns.length} recent runs failed` : '';
             const tooltipTimeout = hasTimeout ? `Currently timing out: ${timedOutCount}/${lastThreeRuns.length} recent runs timed-out` : '';
-            return { hasFailure, hasTimeout, failedCount, timedOutCount, totalCount: lastThreeRuns.length, tooltipFailure, tooltipTimeout };
+
+            // Check for breakage within recent period
+            const breakage = detectBreakage(jobData);
+            const hasBreakage = breakage && new Date(breakage.date) >= recentCutoff;
+            const tooltipBreakage = hasBreakage
+                ? `Breakage detected: ${breakage.failureCount} failures since ${new Date(breakage.date).toLocaleDateString()}\nCommit: ${breakage.commit.substring(0, 8)}\n${breakage.message.substring(0, 60)}${breakage.message.length > 60 ? '...' : ''}`
+                : '';
+
+            return { hasFailure, hasTimeout, hasBreakage, failedCount, timedOutCount, totalCount: lastThreeRuns.length, tooltipFailure, tooltipTimeout, tooltipBreakage };
         }
 
-        // Cache pass rates for all jobs
+        /**
+         * Detect breakage points where a job transitioned from reliable passing to reliable failing.
+         *
+         * Strategy: Look for a REGIME CHANGE - a clear transition from stable passing to stable failing.
+         * This avoids false positives on flaky jobs that have intermittent failures.
+         *
+         * Algorithm:
+         * 1. Confirm currently broken: ≥80% failure rate in last 5 runs (4 of 5)
+         * 2. Scan backwards tracking consecutive passes
+         * 3. Once we find 7 consecutive passes, the last failure before that window is the breakage
+         *
+         * @param {Object} jobData - Job data with recent runs
+         * @returns {Object|null} Breakage info with { commit, date, build, message, author, failureCount } or null
+         */
+        function detectBreakage(jobData) {
+            const CURRENT_WINDOW = 5;
+            const CURRENT_THRESHOLD = 4;
+            const STABLE_WINDOW = 7;  // Need this many consecutive passes to mark stable
+
+            if (!jobData.recent || jobData.recent.length < CURRENT_WINDOW + STABLE_WINDOW) {
+                return null;
+            }
+
+            const runs = jobData.recent;
+            const isFailed = (run) => {
+                const state = getRunState(run);
+                return state === 'failed' || state === 'timed_out';
+            };
+
+            // Step 1: Check if currently broken
+            const recentRuns = runs.slice(0, CURRENT_WINDOW);
+            const recentFailures = recentRuns.filter(isFailed).length;
+            if (recentFailures < CURRENT_THRESHOLD) {
+                return null;
+            }
+
+            // Step 2: Scan backwards tracking consecutive passes
+            let consecutivePasses = 0;
+            let lastFailureIdx = -1;
+
+            for (let i = 0; i < runs.length; i++) {
+                const state = getRunState(runs[i]);
+                if (state === 'passed') {
+                    consecutivePasses++;
+                    if (consecutivePasses >= STABLE_WINDOW) {
+                        break;  // Found stable region
+                    }
+                } else {
+                    consecutivePasses = 0;
+                    if (isFailed(runs[i])) {
+                        lastFailureIdx = i;
+                    }
+                }
+            }
+
+            if (lastFailureIdx < 0 || consecutivePasses < STABLE_WINDOW) {
+                return null;
+            }
+
+            // Count failures from breakage to present
+            let failureCount = 0;
+            for (let i = 0; i <= lastFailureIdx; i++) {
+                if (isFailed(runs[i])) failureCount++;
+            }
+
+            return {
+                commit: runs[lastFailureIdx].commit,
+                date: runs[lastFailureIdx].date,
+                build: runs[lastFailureIdx].build,
+                message: runs[lastFailureIdx].message,
+                author: runs[lastFailureIdx].author,
+                failureCount: failureCount,
+                failureType: getRunState(runs[lastFailureIdx])
+            };
+        }
+
+        // Cache pass rates and breakages for all jobs
         let jobPassRates = {};
+        let jobBreakages = {};
+
         function calculateAllPassRates() {
             jobPassRates = {};
             for (const [name, job] of Object.entries(data.jobs)) {
                 jobPassRates[name] = getJobPassRate(job);
+            }
+        }
+
+        function calculateAllBreakages() {
+            jobBreakages = {};
+            for (const [name, job] of Object.entries(data.jobs)) {
+                const breakage = detectBreakage(job);
+                if (breakage) {
+                    jobBreakages[name] = breakage;
+                }
             }
         }
 
@@ -2661,20 +2759,20 @@
          * Uses a Gaussian kernel for smooth weighting - points closer to the center
          * have more influence than distant points, producing smoother curves than
          * rectangular windows.
-         * 
+         *
          * @param {Array<Object>} points - Array of {x: Date, y: number} data points
          * @param {number} windowDays - Size of averaging window in days (effective width ~3σ)
          * @returns {Array<Object>} Smoothed data points with same structure as input
          */
         function computeMovingAverage(points, windowDays) {
             if (points.length === 0) return [];
-            
+
             // Gaussian window: use windowDays as ~3σ (99.7% of weight within window)
             // This means σ = windowDays / 3
             const sigma = windowDays / 3;
             const sigmaDays = sigma;  // sigma in days
             const sigmaMs = sigmaDays * 24 * 60 * 60 * 1000;  // sigma in milliseconds
-            
+
             // Consider points within ±3σ (99.7% of Gaussian mass)
             const windowMs = windowDays * 24 * 60 * 60 * 1000;
             const result = [];
@@ -2686,7 +2784,7 @@
 
                 let weightedSum = 0;
                 let totalWeight = 0;
-                
+
                 for (const pt of points) {
                     const t = pt.x.getTime();
                     if (t >= windowStart && t <= windowEnd) {
@@ -2694,7 +2792,7 @@
                         const distanceMs = t - centerDate;
                         const distanceDays = distanceMs / (24 * 60 * 60 * 1000);
                         const weight = Math.exp(-(distanceDays * distanceDays) / (2 * sigmaDays * sigmaDays));
-                        
+
                         weightedSum += pt.y * weight;
                         totalWeight += weight;
                     }
@@ -2768,10 +2866,17 @@
                 const smoothedPoints = lineType === 'raw' ? points :
                     computeMovingAverage(points, parseInt(lineType, 10));
 
-                // Build metadata from raw points
+                // Check if this job has a detected breakage
+                const breakage = jobBreakages[jobName];
+                const breakageCommit = breakage ? breakage.commit : null;
+
+                // Build metadata from raw points (include breakage flag)
                 const datasetIdx = datasets.length;
                 points.forEach((pt, idx) => {
-                    chartMetadata[`${datasetIdx}-${idx}`] = pt.meta;
+                    chartMetadata[`${datasetIdx}-${idx}`] = {
+                        ...pt.meta,
+                        isBreakage: breakageCommit && pt.meta.commit === breakageCommit
+                    };
                 });
 
                 // Create custom canvas for timed_out marker (⤒) at high DPI
@@ -2815,6 +2920,44 @@
                     return canvas;
                 };
 
+                // Create breakage marker (cross/X with circle around it to indicate breakage)
+                const createBreakageMarker = (fillColor, markerSize = null) => {
+                    const scale = window.devicePixelRatio || 2;
+                    const size = markerSize ?? (window.innerWidth <= 480 ? 7 : 10);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = size * scale;
+                    canvas.height = size * scale;
+                    canvas.style.width = size + 'px';
+                    canvas.style.height = size + 'px';
+                    const ctx = canvas.getContext('2d');
+                    ctx.scale(scale, scale);
+
+                    const cx = size / 2;
+                    const cy = size / 2;
+                    const radius = size / 2 - 1;
+
+                    // Draw circle border to indicate breakage
+                    ctx.strokeStyle = fillColor;
+                    ctx.lineWidth = 0.8;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+                    ctx.stroke();
+
+                    // Draw cross/X (failure marker) inside - same size as Chart.js crossRot
+                    ctx.strokeStyle = fillColor;
+                    ctx.lineWidth = 1.5;
+                    const crossSize = size * 0.25;
+                    // Draw X
+                    ctx.beginPath();
+                    ctx.moveTo(cx - crossSize, cy - crossSize);
+                    ctx.lineTo(cx + crossSize, cy + crossSize);
+                    ctx.moveTo(cx + crossSize, cy - crossSize);
+                    ctx.lineTo(cx - crossSize, cy + crossSize);
+                    ctx.stroke();
+
+                    return canvas;
+                };
+
                 // Generate per-point colors with perceptually-adjusted hue shifts per agent
                 const uniqueAgents = [...new Set(points.map(p => p.meta.agent || ''))];
                 const agentHueShifts = {};
@@ -2838,8 +2981,19 @@
                     return timedOutMarkerCache[markerColor];
                 };
 
+                // Cache breakage markers per color
+                const breakageMarkerCache = {};
+                const getBreakageMarker = (markerColor) => {
+                    if (!breakageMarkerCache[markerColor]) {
+                        breakageMarkerCache[markerColor] = createBreakageMarker(markerColor);
+                    }
+                    return breakageMarkerCache[markerColor];
+                };
+
                 // Generate point styles based on state (with per-point colors for timeout markers)
                 const pointStyles = points.map((p, i) => {
+                    // Breakage marker takes precedence if this is the breakage commit
+                    if (breakageCommit && p.meta.commit === breakageCommit) return getBreakageMarker(pointColors[i]);
                     if (p.state === 'timed_out') return getTimedOutMarker(pointColors[i]);
                     if (p.state === 'failed' || p.state === 'canceled') return 'crossRot';
                     // Use rectRot (diamond) for retry attempts to make them visually distinct
@@ -2849,6 +3003,8 @@
                 // Smaller points on narrow screens; larger for retries to make them visible
                 const isMobile = window.innerWidth <= 480;
                 const pointRadii = points.map(p => {
+                    // Breakage points same size as regular failed markers
+                    if (breakageCommit && p.meta.commit === breakageCommit) return isMobile ? 3.5 : 5;
                     if (isFailedState(p.state)) return isMobile ? 3.5 : 5;
                     if (p.retry > 0) return isMobile ? 3 : 4;  // Slightly larger for retries
                     return isMobile ? 1.5 : 2;
@@ -2922,9 +3078,12 @@
                         clip: false,
                         yAxisID: 'y'
                     });
-                    // Also track metadata for points dataset
+                    // Also track metadata for points dataset (include breakage flag)
                     points.forEach((pt, idx) => {
-                        chartMetadata[`${datasetIdx + 1}-${idx}`] = pt.meta;
+                        chartMetadata[`${datasetIdx + 1}-${idx}`] = {
+                            ...pt.meta,
+                            isBreakage: breakageCommit && pt.meta.commit === breakageCommit
+                        };
                     });
                 }
             }
@@ -3196,12 +3355,12 @@
                                         if (state === 'passed') return '✓ passed';
                                         return state || '';
                                     };
-                                    const lines = [
-                                        `${getStateDisplay(meta.state)} · ${formatDuration(ctx.parsed.y)}`,
-                                        meta.message || ''
-                                    ];
+                                    const lines = [];
+                                    if (meta.isBreakage) lines.push('⚡ Detected breakage');
+                                    lines.push(`${getStateDisplay(meta.state)} · ${formatDuration(ctx.parsed.y)}`);
+                                    if (meta.message) lines.push(meta.message);
                                     if (meta?.agent) lines.push(`🖥️ ${meta.agent}`);
-                                    return lines.filter(Boolean);
+                                    return lines;
                                 },
                                 labelColor: (ctx) => {
                                     // Use actual color (not transparent for points dataset)
@@ -4372,7 +4531,7 @@
                     const prColor = pr.rate >= 1 ? 'var(--color-success-fg)' : (pr.rate >= PASS_RATE_THRESHOLD ? 'var(--color-attention-fg)' : 'var(--color-danger-fg)');
                     // Check for recent failures and timeouts
                     const job = data.jobs[jobName];
-                    const issueInfo = job ? hasRecentFailure(job) : { hasFailure: false, hasTimeout: false, tooltipFailure: '', tooltipTimeout: '' };
+                    const issueInfo = job ? hasRecentFailure(job) : { hasFailure: false, hasTimeout: false, hasBreakage: false, tooltipFailure: '', tooltipTimeout: '', tooltipBreakage: '' };
                     // Icons: ⚠️ if recent failure, ⏳ if recent timeout, 🔄 if retries present
                     let icons = '';
                     if (issueInfo.hasFailure) icons += '⚠️';
@@ -4385,7 +4544,12 @@
                     if (pr.retries > 0) parts.push(`${pr.retries} retries`);
                     let breakdown = parts.length > 0 ? parts.join(', ') : 'all passed';
                     if (issueInfo.hasFailure) {
-                        breakdown += `\n${issueInfo.tooltipFailure}`;
+                        const breakageInfo = jobBreakages[jobName];
+                        if (breakageInfo) {
+                            breakdown += `\n${issueInfo.tooltipFailure} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`;
+                        } else {
+                            breakdown += `\n${issueInfo.tooltipFailure}`;
+                        }
                     }
                     if (issueInfo.hasTimeout) {
                         breakdown += `\n${issueInfo.tooltipTimeout}`;
@@ -4545,7 +4709,14 @@
                             if (hostCanceled > 0) parts.push(`${hostCanceled} canceled`);
                             if (hostRetries > 0) parts.push(`${hostRetries} retries`);
                             let breakdown = parts.length > 0 ? parts.join(', ') : 'all passed';
-                            if (hostHasFailure) breakdown += `\nCurrently failing: ${hostRecentFailed}/${hostLastThree.length} recent runs failed`;
+                            if (hostHasFailure) {
+                                const breakageInfo = jobBreakages[jobName];
+                                if (breakageInfo) {
+                                    breakdown += `\nCurrently failing: ${hostRecentFailed}/${hostLastThree.length} recent runs failed ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`;
+                                } else {
+                                    breakdown += `\nCurrently failing: ${hostRecentFailed}/${hostLastThree.length} recent runs failed`;
+                                }
+                            }
                             if (hostHasTimeout) breakdown += `\nCurrently timing out: ${hostRecentTimedOut}/${hostLastThree.length} recent runs timed-out`;
                             hostPrHtml = `<span style="color: ${hostPrColor}" title="${escapeHtml(breakdown + ' out of ' + hostTotal + ' in selected range')}">${hostPct}%${hostIcons ? ' ' + hostIcons : ''}</span>`;
                         }
@@ -4815,8 +4986,9 @@
                 jobColors[name] = colors[i];
             });
 
-            // Calculate pass rates for all jobs
+            // Calculate pass rates and breakages for all jobs
             calculateAllPassRates();
+            calculateAllBreakages();
 
             // Build matrix table
             renderMatrixTable();
@@ -4839,23 +5011,34 @@
                 for (const type of typeOrder) {
                     const jobs = jobMatrix[platform][type];
                     const count = jobs.length;
-                    // Check if any job in this cell has recent failures/timeouts
+                    // Check if any job in this cell has recent failures/timeouts/breakages
                     let failureTooltips = [];
                     let timeoutTooltips = [];
+                    let breakageTooltips = [];
                     let hasFailure = false;
                     let hasTimeout = false;
+                    let hasBreakage = false;
 
                     for (const { name } of jobs) {
                         const job = data.jobs[name];
                         if (job) {
                             const issueInfo = hasRecentFailure(job);
                             if (issueInfo.hasFailure) {
-                                failureTooltips.push(`${name}: ${issueInfo.failedCount}/${issueInfo.totalCount}`);
+                                const breakageInfo = jobBreakages[name];
+                                if (breakageInfo) {
+                                    failureTooltips.push(`${name}: ${issueInfo.failedCount}/${issueInfo.totalCount} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`);
+                                } else {
+                                    failureTooltips.push(`${name}: ${issueInfo.failedCount}/${issueInfo.totalCount}`);
+                                }
                                 hasFailure = true;
                             }
                             if (issueInfo.hasTimeout) {
                                 timeoutTooltips.push(`${name}: ${issueInfo.timedOutCount}/${issueInfo.totalCount}`);
                                 hasTimeout = true;
+                            }
+                            if (issueInfo.hasBreakage) {
+                                breakageTooltips.push(name);
+                                hasBreakage = true;
                             }
                         }
                     }
@@ -4863,6 +5046,10 @@
                     html += `<td class="matrix-cell" data-platform="${platform}" data-type="${type}" onclick="toggleMatrixCell('${platform}', '${type}')">`;
                     if (count > 0) {
                         html += `<span class="job-count">${count}</span>`;
+                        if (hasBreakage) {
+                            const tooltip = `Breakage detected:\n${breakageTooltips.join('\n')}`;
+                            html += `<span class="failure-indicator breakage-indicator" title="${escapeHtml(tooltip)}">⚡</span>`;
+                        }
                         if (hasFailure) {
                             const tooltip = `Currently failing:\n${failureTooltips.join('\n')}`;
                             html += `<span class="failure-indicator" title="${escapeHtml(tooltip)}">⚠️</span>`;
@@ -4888,30 +5075,45 @@
                 if (jobs.length > 0) {
                     let failureTooltips = [];
                     let timeoutTooltips = [];
+                    let breakageTooltips = [];
                     let hasFailure = false;
                     let hasTimeout = false;
+                    let hasBreakage = false;
 
                     for (const { name } of jobs) {
                         const job = data.jobs[name];
                         if (job) {
                             const issueInfo = hasRecentFailure(job);
                             if (issueInfo.hasFailure) {
-                                failureTooltips.push(`${name}: ${issueInfo.failedCount}/${issueInfo.totalCount}`);
+                                const breakageInfo = jobBreakages[name];
+                                if (breakageInfo) {
+                                    failureTooltips.push(`${name}: ${issueInfo.failedCount}/${issueInfo.totalCount} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`);
+                                } else {
+                                    failureTooltips.push(`${name}: ${issueInfo.failedCount}/${issueInfo.totalCount}`);
+                                }
                                 hasFailure = true;
                             }
                             if (issueInfo.hasTimeout) {
                                 timeoutTooltips.push(`${name}: ${issueInfo.timedOutCount}/${issueInfo.totalCount}`);
                                 hasTimeout = true;
                             }
+                            if (issueInfo.hasBreakage) {
+                                breakageTooltips.push(name);
+                                hasBreakage = true;
+                            }
                         }
                     }
 
                     let warnIcons = '';
+                    if (hasBreakage) warnIcons += ' ⚡';
                     if (hasFailure) warnIcons += ' ⚠️';
                     if (hasTimeout) warnIcons += ' ⏳';
 
                     const jobList = jobs.map(({ name }) => convertEmojiText(name)).join('\n');
                     let tooltip = jobList;
+                    if (hasBreakage) {
+                        tooltip += '\n\nBreakage detected:\n' + breakageTooltips.join('\n');
+                    }
                     if (hasFailure) {
                         tooltip += '\n\nCurrently failing:\n' + failureTooltips.join('\n');
                     }
@@ -5030,7 +5232,12 @@
                         if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
                         let tooltip = parts.length > 0 ? `${parts.join(', ')} in last ${PASS_RATE_DAYS} days` : `${pr.passed}/${pr.total} passed in last ${PASS_RATE_DAYS} days`;
                         if (issueInfo.hasFailure) {
-                            tooltip += `\n${issueInfo.tooltipFailure}`;
+                            const breakageInfo = jobBreakages[name];
+                            if (breakageInfo) {
+                                tooltip += `\n${issueInfo.tooltipFailure} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`;
+                            } else {
+                                tooltip += `\n${issueInfo.tooltipFailure}`;
+                            }
                         }
                         if (issueInfo.hasTimeout) {
                             tooltip += `\n${issueInfo.tooltipTimeout}`;
@@ -5078,7 +5285,12 @@
                         if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
                         let tooltip = parts.length > 0 ? `${parts.join(', ')} in last ${PASS_RATE_DAYS} days` : `${pr.passed}/${pr.total} passed in last ${PASS_RATE_DAYS} days`;
                         if (issueInfo.hasFailure) {
-                            tooltip += `\n${issueInfo.tooltipFailure}`;
+                            const breakageInfo = jobBreakages[name];
+                            if (breakageInfo) {
+                                tooltip += `\n${issueInfo.tooltipFailure} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`;
+                            } else {
+                                tooltip += `\n${issueInfo.tooltipFailure}`;
+                            }
                         }
                         if (issueInfo.hasTimeout) {
                             tooltip += `\n${issueInfo.tooltipTimeout}`;
@@ -5381,6 +5593,7 @@
 
                     // Recalculate pass rates with complete data and re-render matrix
                     calculateAllPassRates();
+                calculateAllBreakages();
                     renderMatrixTable();
 
                     // Re-apply URL params with complete data to get full selection
