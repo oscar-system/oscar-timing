@@ -2762,23 +2762,29 @@
          *
          * @param {Array<Object>} points - Array of {x: Date, y: number} data points
          * @param {number} windowDays - Size of averaging window in days (effective width ~3σ)
-         * @returns {Array<Object>} Smoothed data points with same structure as input
+         * @returns {Array<Object>} Smoothed data points resampled at even intervals
          */
         function computeMovingAverage(points, windowDays) {
             if (points.length === 0) return [];
 
             // Gaussian window: use windowDays as ~3σ (99.7% of weight within window)
-            // This means σ = windowDays / 3
             const sigma = windowDays / 3;
-            const sigmaDays = sigma;  // sigma in days
-            const sigmaMs = sigmaDays * 24 * 60 * 60 * 1000;  // sigma in milliseconds
-
-            // Consider points within ±3σ (99.7% of Gaussian mass)
+            const sigmaDays = sigma;
+            const sigmaMs = sigmaDays * 24 * 60 * 60 * 1000;
             const windowMs = windowDays * 24 * 60 * 60 * 1000;
-            const result = [];
 
-            for (let i = 0; i < points.length; i++) {
-                const centerDate = points[i].x.getTime();
+            // Determine x domain
+            const minX = Math.min(...points.map(p => p.x.getTime()));
+            const maxX = Math.max(...points.map(p => p.x.getTime()));
+            const rangeMs = maxX - minX;
+
+            // Resample at ~100 evenly spaced points (or fewer if range is small)
+            const numSamples = Math.min(100, Math.max(2, Math.ceil(rangeMs / (24 * 60 * 60 * 1000))));
+            const stepMs = rangeMs / (numSamples - 1);
+
+            const result = [];
+            for (let i = 0; i < numSamples; i++) {
+                const centerDate = minX + i * stepMs;
                 const windowStart = centerDate - windowMs / 2;
                 const windowEnd = centerDate + windowMs / 2;
 
@@ -2788,21 +2794,20 @@
                 for (const pt of points) {
                     const t = pt.x.getTime();
                     if (t >= windowStart && t <= windowEnd) {
-                        // Gaussian weight: exp(-distance² / (2σ²))
                         const distanceMs = t - centerDate;
                         const distanceDays = distanceMs / (24 * 60 * 60 * 1000);
                         const weight = Math.exp(-(distanceDays * distanceDays) / (2 * sigmaDays * sigmaDays));
-
                         weightedSum += pt.y * weight;
                         totalWeight += weight;
                     }
                 }
 
-                result.push({
-                    x: points[i].x,
-                    y: totalWeight > 0 ? weightedSum / totalWeight : points[i].y,
-                    meta: points[i].meta
-                });
+                if (totalWeight > 0) {
+                    result.push({
+                        x: new Date(centerDate),
+                        y: weightedSum / totalWeight
+                    });
+                }
             }
             return result;
         }
