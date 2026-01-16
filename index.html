@@ -2657,13 +2657,25 @@
         }
 
         /**
-         * Compute temporal moving average with centered window.
+         * Compute temporal moving average with Gaussian window.
+         * Uses a Gaussian kernel for smooth weighting - points closer to the center
+         * have more influence than distant points, producing smoother curves than
+         * rectangular windows.
+         * 
          * @param {Array<Object>} points - Array of {x: Date, y: number} data points
-         * @param {number} windowDays - Size of averaging window in days
+         * @param {number} windowDays - Size of averaging window in days (effective width ~3σ)
          * @returns {Array<Object>} Smoothed data points with same structure as input
          */
         function computeMovingAverage(points, windowDays) {
             if (points.length === 0) return [];
+            
+            // Gaussian window: use windowDays as ~3σ (99.7% of weight within window)
+            // This means σ = windowDays / 3
+            const sigma = windowDays / 3;
+            const sigmaDays = sigma;  // sigma in days
+            const sigmaMs = sigmaDays * 24 * 60 * 60 * 1000;  // sigma in milliseconds
+            
+            // Consider points within ±3σ (99.7% of Gaussian mass)
             const windowMs = windowDays * 24 * 60 * 60 * 1000;
             const result = [];
 
@@ -2672,19 +2684,25 @@
                 const windowStart = centerDate - windowMs / 2;
                 const windowEnd = centerDate + windowMs / 2;
 
-                let sum = 0;
-                let count = 0;
+                let weightedSum = 0;
+                let totalWeight = 0;
+                
                 for (const pt of points) {
                     const t = pt.x.getTime();
                     if (t >= windowStart && t <= windowEnd) {
-                        sum += pt.y;
-                        count++;
+                        // Gaussian weight: exp(-distance² / (2σ²))
+                        const distanceMs = t - centerDate;
+                        const distanceDays = distanceMs / (24 * 60 * 60 * 1000);
+                        const weight = Math.exp(-(distanceDays * distanceDays) / (2 * sigmaDays * sigmaDays));
+                        
+                        weightedSum += pt.y * weight;
+                        totalWeight += weight;
                     }
                 }
 
                 result.push({
                     x: points[i].x,
-                    y: count > 0 ? sum / count : points[i].y,
+                    y: totalWeight > 0 ? weightedSum / totalWeight : points[i].y,
                     meta: points[i].meta
                 });
             }
