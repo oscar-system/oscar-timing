@@ -2079,6 +2079,8 @@
             'linux': 'l', 'macos': 'm', 'windows': 'w', 'freebsd': 'f',
             // Type codes
             'build': 'b', 'test': 't', 'upload': 'u', 'coverage': 'c',
+            // Version codes
+            '1.10': '1.10', '1.12': '1.12', '1.13-nightly': '1.13-nightly', 'nightly': 'n',
             // Special group codes
             'juliasyntax': 'js', 'docs': 'd', 'special': 'sp', 'pipeline': 'p', 'upload-results': 'ur', 'other': 'o'
         };
@@ -5458,10 +5460,10 @@
             updateURL();
         }
 
-        function selectByType(type) {
+        function selectByType(version) {
             const jobs = [];
             for (const platform of platformOrder) {
-                jobs.push(...jobMatrix[platform][type]);
+                jobs.push(...jobMatrix[platform][version]);
             }
             toggleJobsSelection(jobs);
             syncJobListUI();
