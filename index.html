@@ -784,7 +784,7 @@
                 margin-right: 4px;
             }
             .toolbar h1 a:first-of-type {
-                display: none; /* Hide "JuliaLang /" on narrow screens */
+                display: none; /* Hide H1 on narrow screens */
             }
             .julia-logo {
                 height: 14px;
@@ -1128,7 +1128,7 @@
 </head>
 <body>
     <div class="toolbar" role="toolbar" aria-label="Dashboard controls">
-        <h1><img src="favicon.svg" alt="Julia CI Timing" class="julia-logo"><a href="https://github.com/JuliaLang" target="_blank" rel="noopener noreferrer" class="link-muted">JuliaLang</a> / <a href="https://github.com/JuliaLang/julia" target="_blank" rel="noopener noreferrer" class="link-inherit">julia</a> <span class="header-separator">|</span> CI Timing <span class="branch-badge" title="Only showing CI runs from commits to master">master</span></h1>
+        <h1><img src="https://www.oscar-system.org/public/OSCAR-Logo.svg" alt="OSCAR Timings" class="julia-logo"><a href="https://github.com/oscar-system" target="_blank" rel="noopener noreferrer" class="link-muted">Oscar-System</a> / <a href="https://github.com/oscar-system/Oscar.jl" target="_blank" rel="noopener noreferrer" class="link-inherit">Oscar.jl</a> <span class="header-separator">|</span> CI Timing <span class="branch-badge" title="Only showing CI runs from commits to master">master</span></h1>
         <select class="time-select" id="time-range" onchange="setTimeRange(this.value)" aria-label="Time range">
             <option value="custom" disabled>Custom</option>
             <option value="7">Last 7 days</option>
@@ -1167,8 +1167,7 @@
         </div>
         <button class="btn btn-icon" onclick="toggleShortcutsHelp()" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">?</button>
         <span class="updated" id="last-updated" aria-live="polite"></span>
-        <a href="https://github.com/JuliaCI/julia-ci-timing/commit/__BUILD_COMMIT__" target="_blank" rel="noopener noreferrer" class="updated link-no-underline" id="build-commit" title="Site build commit">__BUILD_COMMIT_SHORT__</a>
-        <a href="https://github.com/JuliaCI/julia-ci-timing" target="_blank" rel="noopener noreferrer" class="btn btn-link" aria-label="View source on GitHub">GitHub</a>
+        <a href="https://github.com/oscar-system/oscar-timing" target="_blank" rel="noopener noreferrer" class="btn btn-link" aria-label="View source on GitHub">GitHub</a>
     </div>
 
     <div class="warning-banner" id="stale-data-warning" role="alert">
