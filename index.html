@@ -364,6 +364,22 @@
             display: flex;
             gap: 4px;
         }
+        .job-list-controls {
+            padding: 4px 12px 6px;
+            flex-shrink: 0;
+        }
+        .job-filter-input {
+            width: 100%;
+            padding: 4px 8px;
+            font-size: 11px;
+            background: var(--color-canvas-default);
+            border: 1px solid var(--color-border-default);
+            border-radius: 6px;
+            color: var(--color-fg-default);
+        }
+        .job-filter-input::placeholder {
+            color: var(--color-fg-muted);
+        }
         .btn-small {
             padding: 2px 6px;
             font-size: 10px;
@@ -1245,9 +1261,19 @@
                     <div class="job-list-header">
                         <span>Jobs (<span id="job-count">0/0</span>)</span>
                         <span class="job-list-actions">
-                            <button class="btn btn-small" id="btn-all" onclick="selectAllJobs()" aria-label="Select all jobs">All</button>
-                            <button class="btn btn-small" id="btn-none" onclick="deselectAllJobs()" aria-label="Deselect all jobs">None</button>
+                            <button class="btn btn-small" id="btn-all" onclick="selectAllJobs()" aria-label="Select visible jobs">All</button>
+                            <button class="btn btn-small" id="btn-none" onclick="deselectAllJobs()" aria-label="Deselect visible jobs">None</button>
                         </span>
+                    </div>
+                    <div class="job-list-controls">
+                        <input
+                            id="job-filter"
+                            class="job-filter-input"
+                            type="search"
+                            placeholder="Filter jobs..."
+                            aria-label="Filter jobs"
+                            oninput="setJobFilter(this.value)"
+                        >
                     </div>
                     <div class="job-list" id="job-list" role="listbox" aria-label="Available jobs"><div class="loading">Loading jobs...</div></div>
                 </div>
@@ -1321,6 +1347,7 @@
         let chart = null;
         let data = null;
         let selectedJobs = new Set();
+        let jobFilterText = '';
         let timeRangeDays = DEFAULT_TIME_RANGE;
         let lineType = DEFAULT_LINE_TYPE;
         let excludedStates = new Set(['canceled']);  // States to exclude from display (canceled hidden by default)
@@ -4905,15 +4932,40 @@
             updateURL();
         }
 
+        function getVisibleJobNames() {
+            if (!data?.jobs) return [];
+            const filter = jobFilterText.trim().toLowerCase();
+            return Object.keys(data.jobs).filter(name =>
+                filter === '' || convertEmojiText(name).toLowerCase().includes(filter)
+            );
+        }
+
+        function setJobFilter(value) {
+            jobFilterText = value;
+
+            selectedJobs.clear();
+            for (const name of getVisibleJobNames()) {
+                selectedJobs.add(name);
+            }
+
+            renderJobList();
+            refreshAllUI();
+            updateURL();
+        }
+
         function updateToolbarButtons() {
-            const total = Object.keys(data.jobs).length;
-            const selected = selectedJobs.size;
-            document.getElementById('btn-all').classList.toggle('primary', selected === total);
-            document.getElementById('btn-none').classList.toggle('primary', selected === 0);
+            const visibleJobs = getVisibleJobNames();
+            const selectedVisible = visibleJobs.filter(name => selectedJobs.has(name)).length;
+            document.getElementById('btn-all').classList.toggle(
+                'primary',
+                visibleJobs.length > 0 && selectedVisible === visibleJobs.length
+            );
+            document.getElementById('btn-none').classList.toggle('primary', selectedVisible === 0);
         }
 
         function selectAllJobs() {
-            for (const name of Object.keys(data.jobs)) {
+            selectedJobs.clear();
+            for (const name of getVisibleJobNames()) {
                 selectedJobs.add(name);
             }
             syncJobListUI();
@@ -4922,7 +4974,9 @@
         }
 
         function deselectAllJobs() {
-            selectedJobs.clear();
+            for (const name of getVisibleJobNames()) {
+                selectedJobs.delete(name);
+            }
             syncJobListUI();
             refreshAllUI();
             updateURL();
@@ -4986,6 +5040,106 @@
                     specialJobGroups['other'].push({ name, job });
                 }
             }
+        }
+
+        function renderJobList() {
+            const listContainer = document.getElementById('job-list');
+            listContainer.innerHTML = '';
+
+            const getLatestDuration = (job) => job.recent?.[0]?.duration ?? 0;
+            const filter = jobFilterText.trim().toLowerCase();
+
+            const allJobs = Object.entries(data.jobs)
+                .filter(([name]) => filter === '' || convertEmojiText(name).toLowerCase().includes(filter))
+                .map(([name, job]) => {
+                    const issueInfo = hasRecentFailure(job);
+                    const hasIssues = issueInfo.hasFailure || issueInfo.hasTimeout;
+                    return { name, job, issueInfo, hasIssues };
+                });
+
+            if (allJobs.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'loading';
+                empty.textContent = 'No matching jobs';
+                listContainer.appendChild(empty);
+                return;
+            }
+
+            const jobsWithIssues = allJobs
+                .filter(j => j.hasIssues)
+                .sort((a, b) => getLatestDuration(b.job) - getLatestDuration(a.job));
+
+            const jobsWithoutIssues = allJobs
+                .filter(j => !j.hasIssues)
+                .sort((a, b) => getLatestDuration(b.job) - getLatestDuration(a.job));
+
+            function appendJobItem({ name, job, issueInfo }) {
+                const color = jobColors[name];
+                const pr = jobPassRates[name];
+                const item = document.createElement('div');
+                item.className = 'job-item' + (selectedJobs.has(name) ? ' selected' : '');
+                item.dataset.job = name;
+                item.onclick = () => toggleJobItem(item, name);
+
+                let passRateHtml = '';
+                if (pr && pr.total >= PASS_RATE_MIN_RUNS) {
+                    const pct = Math.round(pr.rate * 100);
+                    let rateClass = 'green';
+                    if (pr.rate < 1) rateClass = pr.rate >= PASS_RATE_THRESHOLD ? 'yellow' : 'red';
+
+                    let icons = '';
+                    if (issueInfo.hasFailure) icons += '⚠️';
+                    if (issueInfo.hasTimeout) icons += '⏳';
+
+                    const parts = [];
+                    if (pr.failed > 0) parts.push(`${pr.failed} failed`);
+                    if (pr.timedOut > 0) parts.push(`${pr.timedOut} timed out`);
+                    if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
+
+                    let tooltip = parts.length > 0
+                        ? `${parts.join(', ')} in last ${PASS_RATE_DAYS} days`
+                        : `${pr.passed}/${pr.total} passed in last ${PASS_RATE_DAYS} days`;
+
+                    if (issueInfo.hasFailure) {
+                        const breakageInfo = jobBreakages[name];
+                        if (breakageInfo) {
+                            tooltip += `\n${issueInfo.tooltipFailure} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`;
+                        } else {
+                            tooltip += `\n${issueInfo.tooltipFailure}`;
+                        }
+                    }
+                    if (issueInfo.hasTimeout) {
+                        tooltip += `\n${issueInfo.tooltipTimeout}`;
+                    }
+
+                    passRateHtml = `<span class="pass-rate ${rateClass}" title="${escapeHtml(tooltip)}">${pct}%${icons ? ' ' + icons : ''}</span>`;
+                }
+
+                const latestDuration = getLatestDuration(job);
+                item.innerHTML = `
+                    <span class="color-dot" style="background: ${color}"></span>
+                    <span class="job-name">${convertEmoji(name)}</span>
+                    ${passRateHtml}
+                    <span class="job-median" title="Latest run">${formatDuration(latestDuration)}</span>
+                `;
+                listContainer.appendChild(item);
+            }
+
+            function appendGroup(title, jobs) {
+                if (jobs.length === 0) return;
+
+                const groupHeader = document.createElement('div');
+                groupHeader.className = 'job-group-header';
+                groupHeader.textContent = `${title} (${jobs.length})`;
+                listContainer.appendChild(groupHeader);
+
+                for (const job of jobs) {
+                    appendJobItem(job);
+                }
+            }
+
+            appendGroup('Current Issues', jobsWithIssues);
+            appendGroup('All Jobs', jobsWithoutIssues);
         }
 
         function populateJobSelector() {
@@ -5198,128 +5352,7 @@
                 }
             }
 
-            const getLatestDuration = (job) => job.recent?.[0]?.duration ?? 0;
-
-            // Separate jobs into groups: with current issues and without
-            const allJobs = Object.entries(data.jobs).map(([name, job]) => {
-                const issueInfo = hasRecentFailure(job);
-                const hasIssues = issueInfo.hasFailure || issueInfo.hasTimeout;
-                return { name, job, issueInfo, hasIssues };
-            });
-
-            const jobsWithIssues = allJobs
-                .filter(j => j.hasIssues)
-                .sort((a, b) => getLatestDuration(b.job) - getLatestDuration(a.job));
-
-            const jobsWithoutIssues = allJobs
-                .filter(j => !j.hasIssues)
-                .sort((a, b) => getLatestDuration(b.job) - getLatestDuration(a.job));
-
-            // Render jobs with issues first (if any)
-            if (jobsWithIssues.length > 0) {
-                const groupHeader = document.createElement('div');
-                groupHeader.className = 'job-group-header';
-                groupHeader.textContent = `Current Issues (${jobsWithIssues.length})`;
-                listContainer.appendChild(groupHeader);
-
-                for (const { name, job, issueInfo } of jobsWithIssues) {
-                    const color = jobColors[name];
-                    const pr = jobPassRates[name];
-                    const item = document.createElement('div');
-                    item.className = 'job-item' + (selectedJobs.has(name) ? ' selected' : '');
-                    item.dataset.job = name;
-                    item.onclick = () => toggleJobItem(item, name);
-                    let passRateHtml = '';
-                    if (pr && pr.total >= PASS_RATE_MIN_RUNS) {
-                        const pct = Math.round(pr.rate * 100);
-                        // Color: green=100%, yellow>=90%, red<90%
-                        let rateClass = 'green';
-                        if (pr.rate < 1) rateClass = pr.rate >= PASS_RATE_THRESHOLD ? 'yellow' : 'red';
-                        // Icons: ⚠️ if recent failure, ⏳ if recent timeout
-                        let icons = '';
-                        if (issueInfo.hasFailure) icons += '⚠️';
-                        if (issueInfo.hasTimeout) icons += '⏳';
-                        const parts = [];
-                        if (pr.failed > 0) parts.push(`${pr.failed} failed`);
-                        if (pr.timedOut > 0) parts.push(`${pr.timedOut} timed out`);
-                        if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
-                        let tooltip = parts.length > 0 ? `${parts.join(', ')} in last ${PASS_RATE_DAYS} days` : `${pr.passed}/${pr.total} passed in last ${PASS_RATE_DAYS} days`;
-                        if (issueInfo.hasFailure) {
-                            const breakageInfo = jobBreakages[name];
-                            if (breakageInfo) {
-                                tooltip += `\n${issueInfo.tooltipFailure} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`;
-                            } else {
-                                tooltip += `\n${issueInfo.tooltipFailure}`;
-                            }
-                        }
-                        if (issueInfo.hasTimeout) {
-                            tooltip += `\n${issueInfo.tooltipTimeout}`;
-                        }
-                        passRateHtml = `<span class="pass-rate ${rateClass}" title="${escapeHtml(tooltip)}">${pct}%${icons ? ' ' + icons : ''}</span>`;
-                    }
-                    const latestDuration = getLatestDuration(job);
-                    item.innerHTML = `
-                        <span class="color-dot" style="background: ${color}"></span>
-                        <span class="job-name">${convertEmoji(name)}</span>
-                        ${passRateHtml}
-                        <span class="job-median" title="Latest run">${formatDuration(latestDuration)}</span>
-                    `;
-                    listContainer.appendChild(item);
-                }
-            }
-
-            // Render jobs without issues
-            if (jobsWithoutIssues.length > 0) {
-                const groupHeader = document.createElement('div');
-                groupHeader.className = 'job-group-header';
-                groupHeader.textContent = `All Jobs (${jobsWithoutIssues.length})`;
-                listContainer.appendChild(groupHeader);
-
-                for (const { name, job, issueInfo } of jobsWithoutIssues) {
-                    const color = jobColors[name];
-                    const pr = jobPassRates[name];
-                    const item = document.createElement('div');
-                    item.className = 'job-item' + (selectedJobs.has(name) ? ' selected' : '');
-                    item.dataset.job = name;
-                    item.onclick = () => toggleJobItem(item, name);
-                    let passRateHtml = '';
-                    if (pr && pr.total >= PASS_RATE_MIN_RUNS) {
-                        const pct = Math.round(pr.rate * 100);
-                        // Color: green=100%, yellow>=90%, red<90%
-                        let rateClass = 'green';
-                        if (pr.rate < 1) rateClass = pr.rate >= PASS_RATE_THRESHOLD ? 'yellow' : 'red';
-                        // Icons: ⚠️ if recent failure, ⏳ if recent timeout
-                        let icons = '';
-                        if (issueInfo.hasFailure) icons += '⚠️';
-                        if (issueInfo.hasTimeout) icons += '⏳';
-                        const parts = [];
-                        if (pr.failed > 0) parts.push(`${pr.failed} failed`);
-                        if (pr.timedOut > 0) parts.push(`${pr.timedOut} timed out`);
-                        if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
-                        let tooltip = parts.length > 0 ? `${parts.join(', ')} in last ${PASS_RATE_DAYS} days` : `${pr.passed}/${pr.total} passed in last ${PASS_RATE_DAYS} days`;
-                        if (issueInfo.hasFailure) {
-                            const breakageInfo = jobBreakages[name];
-                            if (breakageInfo) {
-                                tooltip += `\n${issueInfo.tooltipFailure} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`;
-                            } else {
-                                tooltip += `\n${issueInfo.tooltipFailure}`;
-                            }
-                        }
-                        if (issueInfo.hasTimeout) {
-                            tooltip += `\n${issueInfo.tooltipTimeout}`;
-                        }
-                        passRateHtml = `<span class="pass-rate ${rateClass}" title="${escapeHtml(tooltip)}">${pct}%${icons ? ' ' + icons : ''}</span>`;
-                    }
-                    const latestDuration = getLatestDuration(job);
-                    item.innerHTML = `
-                        <span class="color-dot" style="background: ${color}"></span>
-                        <span class="job-name">${convertEmoji(name)}</span>
-                        ${passRateHtml}
-                        <span class="job-median" title="Latest run">${formatDuration(latestDuration)}</span>
-                    `;
-                    listContainer.appendChild(item);
-                }
-            }
+            renderJobList();
 
             // Apply comparison mode from URL params
             applyComparisonParam();
