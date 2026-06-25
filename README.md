@@ -6,7 +6,7 @@ infrastructure.
 
 ## Live Dashboard
 
-Visit: **https://oscar-system.github.io/oscar-timing/**
+Visit: **https://speed.oscar-system.org**
 
 ## How to run locally
 
