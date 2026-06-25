@@ -650,7 +650,7 @@ function generate_comparison_url(jobs::Vector{JobTiming}, build_number::Int, bas
     # Don't double-encode - job names are already encoded, just join with safe delimiters
     pr = pr_number === nothing ? 0 : pr_number
     param = "$(pr):$(build_number):$(base_build):$(join(job_parts, ","))"
-    return "https://oscar-system.github.io/oscar-timing/?c=$param"
+    return "https://speed.oscar-system.org/?c=$param"
 end
 
 function main()
