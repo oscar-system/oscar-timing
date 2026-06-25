@@ -316,16 +316,6 @@
         .section-header.collapsed .section-header-text::after {
             transform: rotate(-90deg);
         }
-        .section-header-actions {
-            display: none; /* Hidden by default, shown on mobile */
-            gap: 4px;
-            margin-left: auto;
-        }
-        .section-header-actions .btn-small {
-            padding: 4px 10px;
-            font-size: 11px;
-            min-height: 24px;
-        }
         .collapsible-content {
             transition: max-height 0.25s ease, opacity 0.2s ease;
             overflow: hidden;
@@ -359,10 +349,6 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-        }
-        .job-list-actions {
-            display: flex;
-            gap: 4px;
         }
         .job-list-controls {
             padding: 4px 12px 6px;
@@ -868,9 +854,6 @@
                 justify-content: space-between;
                 align-items: center;
             }
-            .section-header-actions {
-                display: flex;
-            }
             .job-matrix-wrapper .collapsible-content {
                 max-height: 280px;
                 overflow-y: auto;
@@ -1233,10 +1216,6 @@
                 <span class="shortcut-desc">Close popups/dialogs</span>
                 <span class="shortcut-key">r</span>
                 <span class="shortcut-desc">Reset zoom/view</span>
-                <span class="shortcut-key">a</span>
-                <span class="shortcut-desc">Select all jobs</span>
-                <span class="shortcut-key">n</span>
-                <span class="shortcut-desc">Deselect all jobs</span>
             </div>
         </div>
     </div>
@@ -1252,18 +1231,10 @@
             <div class="job-list-section">
                 <div class="section-header" id="section-jobs" onclick="toggleSection(this)">
                     <span class="section-header-text">Jobs (<span id="job-count-mobile">0/0</span>)</span>
-                    <span class="section-header-actions" onclick="event.stopPropagation()">
-                        <button class="btn btn-small" onclick="selectAllJobs()">All</button>
-                        <button class="btn btn-small" onclick="deselectAllJobs()">None</button>
-                    </span>
                 </div>
                 <div class="collapsible-content">
                     <div class="job-list-header">
                         <span>Jobs (<span id="job-count">0/0</span>)</span>
-                        <span class="job-list-actions">
-                            <button class="btn btn-small" id="btn-all" onclick="selectAllJobs()" aria-label="Select visible jobs">All</button>
-                            <button class="btn btn-small" id="btn-none" onclick="deselectAllJobs()" aria-label="Deselect visible jobs">None</button>
-                        </span>
                     </div>
                     <div class="job-list-controls">
                         <input
@@ -1400,7 +1371,6 @@
             updateHostFilterUI();
             updateChart();
             updateStatsTable();
-            updateToolbarButtons();
         }
 
         function toggleJobsSelection(jobs) {
@@ -4239,12 +4209,6 @@
             } else if (e.key === 'r') {
                 e.preventDefault();
                 if (customXMin !== null || customYMin !== null) resetZoom();
-            } else if (e.key === 'a') {
-                e.preventDefault();
-                selectAllJobs();
-            } else if (e.key === 'n') {
-                e.preventDefault();
-                deselectAllJobs();
             }
         });
 
@@ -4949,35 +4913,6 @@
             }
 
             renderJobList();
-            refreshAllUI();
-            updateURL();
-        }
-
-        function updateToolbarButtons() {
-            const visibleJobs = getVisibleJobNames();
-            const selectedVisible = visibleJobs.filter(name => selectedJobs.has(name)).length;
-            document.getElementById('btn-all').classList.toggle(
-                'primary',
-                visibleJobs.length > 0 && selectedVisible === visibleJobs.length
-            );
-            document.getElementById('btn-none').classList.toggle('primary', selectedVisible === 0);
-        }
-
-        function selectAllJobs() {
-            selectedJobs.clear();
-            for (const name of getVisibleJobNames()) {
-                selectedJobs.add(name);
-            }
-            syncJobListUI();
-            refreshAllUI();
-            updateURL();
-        }
-
-        function deselectAllJobs() {
-            for (const name of getVisibleJobNames()) {
-                selectedJobs.delete(name);
-            }
-            syncJobListUI();
             refreshAllUI();
             updateURL();
         }
