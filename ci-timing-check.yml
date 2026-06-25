@@ -52,7 +52,7 @@ jobs:
       - name: Checkout timing analysis tools
         uses: actions/checkout@v4
         with:
-          repository: JuliaCI/julia-ci-timing
+          repository: oscar-system/oscar-timing
           path: timing-tools
 
       - name: Setup Julia

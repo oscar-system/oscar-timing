@@ -1,5 +1,5 @@
 #!/usr/bin/env julia
-# Fetch Julia CI timing data from Buildkite API
+# Fetch OSCAR timing data from Buildkite API
 
 using HTTP
 using JSON3
