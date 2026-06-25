@@ -356,11 +356,31 @@
         }
         .job-filter-input {
             width: 100%;
-            padding: 4px 8px;
+            padding: 4px 28px 4px 8px;
             font-size: 11px;
             background: var(--color-canvas-default);
             border: 1px solid var(--color-border-default);
             border-radius: 6px;
+            color: var(--color-fg-default);
+        }
+        .job-filter-wrapper {
+            position: relative;
+        }
+        .job-filter-clear {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            border: none;
+            background: transparent;
+            color: var(--color-fg-muted);
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 2px 4px;
+            display: none;
+        }
+        .job-filter-clear:hover {
             color: var(--color-fg-default);
         }
         .job-filter-input::placeholder {
@@ -1238,14 +1258,24 @@
                         <span>Jobs (<span id="job-count">0/0</span>)</span>
                     </div>
                     <div class="job-list-controls">
-                        <input
-                            id="job-filter"
-                            class="job-filter-input"
-                            type="search"
-                            placeholder="Search jobs..."
-                            aria-label="Search jobs"
-                            oninput="setJobFilter(this.value)"
-                        >
+                        <div class="job-filter-wrapper">
+                            <input
+                                id="job-filter"
+                                class="job-filter-input"
+                                type="search"
+                                placeholder="Search jobs..."
+                                aria-label="Search jobs"
+                                oninput="setJobFilter(this.value)"
+                            >
+                            <button
+                                id="job-filter-clear"
+                                class="job-filter-clear"
+                                onclick="clearJobFilter()"
+                                aria-label="Clear search"
+                                title="Clear search">
+                                ×
+                            </button>
+                        </div>
                     </div>
                     <div class="job-list-summary" id="job-list" aria-live="polite"></div>
                 </div>
@@ -4908,6 +4938,8 @@
 
         function setJobFilter(value) {
             jobFilterText = value;
+            const clearButton = document.getElementById('job-filter-clear');
+            clearButton.style.display = value ? 'block' : 'none';
             renderJobList();
 
             if (jobFilterTimer !== null) {
@@ -4924,6 +4956,13 @@
                 updateURL();
                 jobFilterTimer = null;
             }, 150);
+        }
+
+        function clearJobFilter() {
+            const input = document.getElementById('job-filter');
+            input.value = '';
+            setJobFilter('');
+            input.focus();
         }
 
         // Matrix organization
