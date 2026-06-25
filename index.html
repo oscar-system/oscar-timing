@@ -371,11 +371,12 @@
             font-size: 10px;
             line-height: 14px;
         }
-        .job-list {
-            padding: 0;
-            flex: 1;
-            overflow-y: auto;
-        }
+        .job-list-summary {
+            padding: 4px 12px 8px;
+            font-size: 11px;
+            color: var(--color-fg-muted);
+            flex-shrink: 0;
+        }        
         .job-item {
             display: flex;
             align-items: center;
@@ -1246,7 +1247,7 @@
                             oninput="setJobFilter(this.value)"
                         >
                     </div>
-                    <div class="job-list" id="job-list" role="listbox" aria-label="Available jobs"><div class="loading">Loading jobs...</div></div>
+                    <div class="job-list-summary" id="job-list" aria-live="polite"></div>
                 </div>
             </div>
         </aside>
@@ -4987,102 +4988,16 @@
 
         function renderJobList() {
             const listContainer = document.getElementById('job-list');
-            listContainer.innerHTML = '';
+            const visibleJobs = getVisibleJobNames();
+            const totalJobs = data?.jobs ? Object.keys(data.jobs).length : 0;
 
-            const getLatestDuration = (job) => job.recent?.[0]?.duration ?? 0;
-            const filter = jobFilterText.trim().toLowerCase();
-
-            const allJobs = Object.entries(data.jobs)
-                .filter(([name]) => filter === '' || convertEmojiText(name).toLowerCase().includes(filter))
-                .map(([name, job]) => {
-                    const issueInfo = hasRecentFailure(job);
-                    const hasIssues = issueInfo.hasFailure || issueInfo.hasTimeout;
-                    return { name, job, issueInfo, hasIssues };
-                });
-
-            if (allJobs.length === 0) {
-                const empty = document.createElement('div');
-                empty.className = 'loading';
-                empty.textContent = 'No jobs match the current search.';
-                listContainer.appendChild(empty);
-                return;
+            if (visibleJobs.length === 0) {
+                listContainer.textContent = 'No jobs match the current search.';
+            } else if (jobFilterText.trim() === '') {
+                listContainer.textContent = `Showing all ${totalJobs} jobs.`;
+            } else {
+                listContainer.textContent = `Showing ${visibleJobs.length} of ${totalJobs} jobs.`;
             }
-
-            const jobsWithIssues = allJobs
-                .filter(j => j.hasIssues)
-                .sort((a, b) => getLatestDuration(b.job) - getLatestDuration(a.job));
-
-            const jobsWithoutIssues = allJobs
-                .filter(j => !j.hasIssues)
-                .sort((a, b) => getLatestDuration(b.job) - getLatestDuration(a.job));
-
-            function appendJobItem({ name, job, issueInfo }) {
-                const color = jobColors[name];
-                const pr = jobPassRates[name];
-                const item = document.createElement('div');
-                item.className = 'job-item' + (selectedJobs.has(name) ? ' selected' : '');
-                item.dataset.job = name;
-                item.onclick = () => toggleJobItem(item, name);
-
-                let passRateHtml = '';
-                if (pr && pr.total >= PASS_RATE_MIN_RUNS) {
-                    const pct = Math.round(pr.rate * 100);
-                    let rateClass = 'green';
-                    if (pr.rate < 1) rateClass = pr.rate >= PASS_RATE_THRESHOLD ? 'yellow' : 'red';
-
-                    let icons = '';
-                    if (issueInfo.hasFailure) icons += '⚠️';
-                    if (issueInfo.hasTimeout) icons += '⏳';
-
-                    const parts = [];
-                    if (pr.failed > 0) parts.push(`${pr.failed} failed`);
-                    if (pr.timedOut > 0) parts.push(`${pr.timedOut} timed out`);
-                    if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
-
-                    let tooltip = parts.length > 0
-                        ? `${parts.join(', ')} in last ${PASS_RATE_DAYS} days`
-                        : `${pr.passed}/${pr.total} passed in last ${PASS_RATE_DAYS} days`;
-
-                    if (issueInfo.hasFailure) {
-                        const breakageInfo = jobBreakages[name];
-                        if (breakageInfo) {
-                            tooltip += `\n${issueInfo.tooltipFailure} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`;
-                        } else {
-                            tooltip += `\n${issueInfo.tooltipFailure}`;
-                        }
-                    }
-                    if (issueInfo.hasTimeout) {
-                        tooltip += `\n${issueInfo.tooltipTimeout}`;
-                    }
-
-                    passRateHtml = `<span class="pass-rate ${rateClass}" title="${escapeHtml(tooltip)}">${pct}%${icons ? ' ' + icons : ''}</span>`;
-                }
-
-                const latestDuration = getLatestDuration(job);
-                item.innerHTML = `
-                    <span class="color-dot" style="background: ${color}"></span>
-                    <span class="job-name">${convertEmoji(name)}</span>
-                    ${passRateHtml}
-                    <span class="job-median" title="Latest run">${formatDuration(latestDuration)}</span>
-                `;
-                listContainer.appendChild(item);
-            }
-
-            function appendGroup(title, jobs) {
-                if (jobs.length === 0) return;
-
-                const groupHeader = document.createElement('div');
-                groupHeader.className = 'job-group-header';
-                groupHeader.textContent = `${title} (${jobs.length})`;
-                listContainer.appendChild(groupHeader);
-
-                for (const job of jobs) {
-                    appendJobItem(job);
-                }
-            }
-
-            appendGroup('Current Issues', jobsWithIssues);
-            appendGroup('All Jobs', jobsWithoutIssues);
         }
 
         function populateJobSelector() {
