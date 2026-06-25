@@ -16,7 +16,7 @@ From the repository root, execute
 python3 -m http.server
 ```
 
-and open <http://127.0.0.1:8000/>.
+and open the link shown in the terminal.
 
 ## Data Pipeline
 
