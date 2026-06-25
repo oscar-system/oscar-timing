@@ -1251,11 +1251,11 @@
             </div>
             <div class="job-list-section">
                 <div class="section-header" id="section-jobs" onclick="toggleSection(this)">
-                    <span class="section-header-text">Jobs (<span id="job-count-mobile">0/0</span>)</span>
+                    <span class="section-header-text">Jobs (<span id="job-count-mobile">0 / 0</span>)</span>
                 </div>
                 <div class="collapsible-content">
                     <div class="job-list-header">
-                        <span>Jobs (<span id="job-count">0/0</span>)</span>
+                        <span>Jobs (<span id="job-count">0 / 0</span>)</span>
                     </div>
                     <div class="job-list-controls">
                         <div class="job-filter-wrapper">
@@ -5046,15 +5046,11 @@
 
         function renderJobList() {
             const listContainer = document.getElementById('job-list');
-            const visibleJobs = getVisibleJobNames();
-            const totalJobs = data?.jobs ? Object.keys(data.jobs).length : 0;
 
-            if (visibleJobs.length === 0) {
-                listContainer.textContent = 'No jobs match the current search.';
-            } else if (jobFilterText.trim() === '') {
-                listContainer.textContent = `${totalJobs} / ${totalJobs} jobs shown`;
+            if (getVisibleJobNames().length === 0) {
+                listContainer.textContent = 'No matches';
             } else {
-                listContainer.textContent = `${visibleJobs.length} / ${totalJobs} jobs shown`;
+                listContainer.textContent = '';
             }
         }
 
@@ -5308,7 +5304,8 @@
 
         function updateJobCount() {
             const total = Object.keys(data.jobs).length;
-            const countText = `${selectedJobs.size}/${total}`;
+            const visible = getVisibleJobNames().length;
+            const countText = `${visible} / ${total}`;
             document.getElementById('job-count').textContent = countText;
             const mobileCount = document.getElementById('job-count-mobile');
             if (mobileCount) mobileCount.textContent = countText;
