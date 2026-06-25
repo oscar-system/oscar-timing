@@ -1,50 +1,33 @@
-# Julia CI Timing Dashboard
+# OSCAR Timing Dashboard
 
-A dashboard tracking build and test times for the Julia programming language's CI on [Buildkite](https://buildkite.com/julialang/julia-master).
+This repository provides a web dashboard which collects,
+visualizes, and compares timing information from the OSCAR benchmark
+infrastructure.
 
 ## Live Dashboard
 
-Visit: **https://JuliaCI.github.io/julia-ci-timing/**
+Visit: **https://speed.oscar-system.org**
 
-## Features
+## How to run locally
 
-- **Interactive Charts** — Visualize timing trends for all CI jobs with zoom, pan, and filtering
-- **Moving Averages** — Toggle between raw data and 7/30/90-day smoothed trends
-- **Statistical Analysis** — Linear regression with p-values to detect significant trends
-- **Host Filtering** — Filter by build agent to isolate host-specific performance
-- **State Filtering** — Show/hide passed, failed, timed_out, and canceled jobs
-- **Code Coverage** — Track Codecov coverage trends alongside timing data
-- **Comparison Mode** — Compare PR builds against master baseline with visual overlays
-
-## Comparison Tool
-
-Compare a PR or specific build against the baseline:
+From the repository root, execute
 
 ```bash
-export BUILDKITE_API_TOKEN="your-token"
-julia --project=. compare_build.jl <build_number> [options]
+python3 -m http.server
 ```
 
-**Options:**
-- `--baseline-commits N` — Number of baseline commits to compare (default: 20)
-- `--base-build N` — Override automatic base detection
-- `--threshold PERCENT` — Minimum percent change for significance (default: 10)
-- `--json` — Output as JSON
-- `--markdown` — Output as Markdown (for GitHub PR comments)
+and open the link shown in the terminal.
 
-For PR builds, the tool automatically detects the merge base using git and compares against commits from that point in history. Results include a URL to visualize the comparison on the dashboard.
+## Data Pipeline
 
-**Exit codes:** 0 = no regressions, 1 = regressions detected, 2 = error
+A dedicated server (`build-bench`) periodically (approximately every
+three hours) fetches the latest changes from the OSCAR repository. If
+new commits are available, it benchmarks them one at a time in
+chronological order.
 
-## GitHub Actions Integration
-
-See [ci-timing-check.yml](ci-timing-check.yml) for a GitHub Actions workflow that automatically checks PR builds for timing regressions and posts results as PR comments.
-
-## Data Sources
-
-The dashboard fetches data from two Buildkite pipelines:
-- **julia-master** — Regular builds and tests on every commit
-- **julia-master-scheduled** — Coverage jobs run on periodic commits
+The benchmarking process produces timing data, which are committed to
+this repository. Since the dashboard is hosted as a GitHub Pages site,
+pushing the updated data automatically updates the website.
 
 ## License
 
