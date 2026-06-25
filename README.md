@@ -2,7 +2,7 @@
 
 This repository provides a web dashboard which collects,
 visualizes, and compares timing information from the OSCAR benchmark
-integration (CI) infrastructure.
+infrastructure.
 
 ## Live Dashboard
 
