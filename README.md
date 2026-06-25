@@ -1,7 +1,7 @@
 # OSCAR Timing Dashboard
 
 This repository provides a web dashboard which collects,
-visualize, and compare timing information from the OSCAR continuous
+visualizes, and compares timing information from the OSCAR benchmark
 integration (CI) infrastructure.
 
 ## Live Dashboard
