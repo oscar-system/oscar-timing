@@ -5033,9 +5033,9 @@
             if (visibleJobs.length === 0) {
                 listContainer.textContent = 'No jobs match the current search.';
             } else if (jobFilterText.trim() === '') {
-                listContainer.textContent = `Showing all ${totalJobs} jobs.`;
+                listContainer.textContent = `${totalJobs} / ${totalJobs} jobs shown`;
             } else {
-                listContainer.textContent = `Showing ${visibleJobs.length} of ${totalJobs} jobs.`;
+                listContainer.textContent = `${visibleJobs.length} / ${totalJobs} jobs shown`;
             }
         }
 
