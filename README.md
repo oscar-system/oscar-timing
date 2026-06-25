@@ -1,6 +1,6 @@
 # OSCAR Timing Dashboard
 
-This repository provides a web dashboard and helper scripts to collect,
+This repository provides a web dashboard which collects,
 visualize, and compare timing information from the OSCAR continuous
 integration (CI) infrastructure.
 
