@@ -1241,8 +1241,8 @@
                             id="job-filter"
                             class="job-filter-input"
                             type="search"
-                            placeholder="Filter jobs..."
-                            aria-label="Filter jobs"
+                            placeholder="Search jobs..."
+                            aria-label="Search jobs"
                             oninput="setJobFilter(this.value)"
                         >
                     </div>
@@ -1319,6 +1319,7 @@
         let data = null;
         let selectedJobs = new Set();
         let jobFilterText = '';
+        let jobFilterTimer = null;
         let timeRangeDays = DEFAULT_TIME_RANGE;
         let lineType = DEFAULT_LINE_TYPE;
         let excludedStates = new Set(['canceled']);  // States to exclude from display (canceled hidden by default)
@@ -4906,15 +4907,22 @@
 
         function setJobFilter(value) {
             jobFilterText = value;
+            renderJobList();
 
-            selectedJobs.clear();
-            for (const name of getVisibleJobNames()) {
-                selectedJobs.add(name);
+            if (jobFilterTimer !== null) {
+                clearTimeout(jobFilterTimer);
             }
 
-            renderJobList();
-            refreshAllUI();
-            updateURL();
+            jobFilterTimer = setTimeout(() => {
+                selectedJobs.clear();
+                for (const name of getVisibleJobNames()) {
+                    selectedJobs.add(name);
+                }
+
+                refreshAllUI();
+                updateURL();
+                jobFilterTimer = null;
+            }, 150);
         }
 
         // Matrix organization
@@ -4995,7 +5003,7 @@
             if (allJobs.length === 0) {
                 const empty = document.createElement('div');
                 empty.className = 'loading';
-                empty.textContent = 'No matching jobs';
+                empty.textContent = 'No jobs match the current search.';
                 listContainer.appendChild(empty);
                 return;
             }
