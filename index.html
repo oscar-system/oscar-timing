@@ -109,7 +109,7 @@
             align-items: center;
             gap: 8px;
         }
-        .julia-logo {
+        .oscar-logo {
             height: 18px;
             width: auto;
         }
@@ -316,16 +316,6 @@
         .section-header.collapsed .section-header-text::after {
             transform: rotate(-90deg);
         }
-        .section-header-actions {
-            display: none; /* Hidden by default, shown on mobile */
-            gap: 4px;
-            margin-left: auto;
-        }
-        .section-header-actions .btn-small {
-            padding: 4px 10px;
-            font-size: 11px;
-            min-height: 24px;
-        }
         .collapsible-content {
             transition: max-height 0.25s ease, opacity 0.2s ease;
             overflow: hidden;
@@ -360,59 +350,53 @@
             justify-content: space-between;
             align-items: center;
         }
-        .job-list-actions {
-            display: flex;
-            gap: 4px;
+        .job-list-controls {
+            padding: 4px 12px 6px;
+            flex-shrink: 0;
+        }
+        .job-filter-input {
+            width: 100%;
+            padding: 4px 28px 4px 8px;
+            font-size: 11px;
+            background: var(--color-canvas-default);
+            border: 1px solid var(--color-border-default);
+            border-radius: 6px;
+            color: var(--color-fg-default);
+        }
+        .job-filter-wrapper {
+            position: relative;
+        }
+        .job-filter-clear {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            border: none;
+            background: transparent;
+            color: var(--color-fg-muted);
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 2px 4px;
+            display: none;
+        }
+        .job-filter-clear:hover {
+            color: var(--color-fg-default);
+        }
+        .job-filter-input::placeholder {
+            color: var(--color-fg-muted);
         }
         .btn-small {
             padding: 2px 6px;
             font-size: 10px;
             line-height: 14px;
         }
-        .job-list {
-            padding: 0;
-            flex: 1;
-            overflow-y: auto;
-        }
-        .job-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 2px 12px;
-            font-size: 10px;
-            cursor: pointer;
-            opacity: 0.4;
-        }
-        .job-item:hover { background: var(--color-neutral-muted); }
-        .job-item.selected { opacity: 1; }
-        .job-item .job-name {
-            flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            color: var(--color-fg-default);
-        }
-        .job-item .job-median {
+        .job-list-summary {
+            padding: 4px 12px 8px;
+            font-size: 11px;
             color: var(--color-fg-muted);
-            font-size: 9px;
-            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
-        }
-        .job-group-header {
-            padding: 8px 12px 4px;
-            font-size: 10px;
-            font-weight: 600;
-            color: var(--color-fg-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            background: var(--color-canvas-subtle);
-            border-top: 1px solid var(--color-border-default);
-            border-bottom: 1px solid var(--color-border-default);
-            margin-top: 4px;
-        }
-        .job-group-header:first-child {
-            margin-top: 0;
-            border-top: none;
-        }
+            flex-shrink: 0;
+        }        
         .color-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
         .coverage-logo { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
         .bk-emoji { height: 1em; width: 1em; vertical-align: -0.1em; display: inline; }
@@ -786,7 +770,7 @@
             .toolbar h1 a:first-of-type {
                 display: none; /* Hide H1 on narrow screens */
             }
-            .julia-logo {
+            .oscar-logo {
                 height: 14px;
             }
             .btn, .time-select {
@@ -837,23 +821,12 @@
                 max-height: none;
                 overflow: visible;
             }
-            .job-list {
-                -webkit-overflow-scrolling: touch;
-                max-height: 150px;
-            }
-            .job-item {
-                padding: 8px 10px; /* Larger touch targets */
-                font-size: 11px;
-            }
 
             /* Collapsible sections on mobile */
             .section-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-            }
-            .section-header-actions {
-                display: flex;
             }
             .job-matrix-wrapper .collapsible-content {
                 max-height: 280px;
@@ -928,10 +901,6 @@
         /* Touch device optimizations */
         @media (hover: none) and (pointer: coarse) {
             .matrix-cell:active {
-                background: var(--color-accent-emphasis);
-                color: white;
-            }
-            .job-item:active {
                 background: var(--color-accent-emphasis);
                 color: white;
             }
@@ -1128,7 +1097,7 @@
 </head>
 <body>
     <div class="toolbar" role="toolbar" aria-label="Dashboard controls">
-        <h1><img src="https://www.oscar-system.org/public/OSCAR-Logo.svg" alt="OSCAR Timings" class="julia-logo"><a href="https://github.com/oscar-system" target="_blank" rel="noopener noreferrer" class="link-muted">Oscar-System</a> / <a href="https://github.com/oscar-system/Oscar.jl" target="_blank" rel="noopener noreferrer" class="link-inherit">Oscar.jl</a> <span class="header-separator">|</span> CI Timing <span class="branch-badge" title="Only showing CI runs from commits to master">master</span></h1>
+        <h1><img src="https://www.oscar-system.org/public/OSCAR-Logo.svg" alt="OSCAR Timings" class="oscar-logo"><a href="https://github.com/oscar-system" target="_blank" rel="noopener noreferrer" class="link-muted">Oscar-System</a> / <a href="https://github.com/oscar-system/Oscar.jl" target="_blank" rel="noopener noreferrer" class="link-inherit">Oscar.jl</a> <span class="header-separator">|</span> CI Timing <span class="branch-badge" title="Only showing CI runs from commits to master">master</span></h1>
         <select class="time-select" id="time-range" onchange="setTimeRange(this.value)" aria-label="Time range">
             <option value="custom" disabled>Custom</option>
             <option value="7">Last 7 days</option>
@@ -1217,10 +1186,6 @@
                 <span class="shortcut-desc">Close popups/dialogs</span>
                 <span class="shortcut-key">r</span>
                 <span class="shortcut-desc">Reset zoom/view</span>
-                <span class="shortcut-key">a</span>
-                <span class="shortcut-desc">Select all jobs</span>
-                <span class="shortcut-key">n</span>
-                <span class="shortcut-desc">Deselect all jobs</span>
             </div>
         </div>
     </div>
@@ -1235,21 +1200,33 @@
             </div>
             <div class="job-list-section">
                 <div class="section-header" id="section-jobs" onclick="toggleSection(this)">
-                    <span class="section-header-text">Jobs (<span id="job-count-mobile">0/0</span>)</span>
-                    <span class="section-header-actions" onclick="event.stopPropagation()">
-                        <button class="btn btn-small" onclick="selectAllJobs()">All</button>
-                        <button class="btn btn-small" onclick="deselectAllJobs()">None</button>
-                    </span>
+                    <span class="section-header-text">Jobs (<span id="job-count-mobile">0 / 0</span>)</span>
                 </div>
                 <div class="collapsible-content">
                     <div class="job-list-header">
-                        <span>Jobs (<span id="job-count">0/0</span>)</span>
-                        <span class="job-list-actions">
-                            <button class="btn btn-small" id="btn-all" onclick="selectAllJobs()" aria-label="Select all jobs">All</button>
-                            <button class="btn btn-small" id="btn-none" onclick="deselectAllJobs()" aria-label="Deselect all jobs">None</button>
-                        </span>
+                        <span>Jobs (<span id="job-count">0 / 0</span>)</span>
                     </div>
-                    <div class="job-list" id="job-list" role="listbox" aria-label="Available jobs"><div class="loading">Loading jobs...</div></div>
+                    <div class="job-list-controls">
+                        <div class="job-filter-wrapper">
+                            <input
+                                id="job-filter"
+                                class="job-filter-input"
+                                type="search"
+                                placeholder="Search jobs..."
+                                aria-label="Search jobs"
+                                oninput="setJobFilter(this.value)"
+                            >
+                            <button
+                                id="job-filter-clear"
+                                class="job-filter-clear"
+                                onclick="clearJobFilter()"
+                                aria-label="Clear search"
+                                title="Clear search">
+                                ×
+                            </button>
+                        </div>
+                    </div>
+                    <div class="job-list-summary" id="job-list" aria-live="polite"></div>
                 </div>
             </div>
         </aside>
@@ -1321,6 +1298,8 @@
         let chart = null;
         let data = null;
         let selectedJobs = new Set();
+        let jobFilterText = '';
+        let jobFilterTimer = null;
         let timeRangeDays = DEFAULT_TIME_RANGE;
         let lineType = DEFAULT_LINE_TYPE;
         let excludedStates = new Set(['canceled']);  // States to exclude from display (canceled hidden by default)
@@ -1373,7 +1352,6 @@
             updateHostFilterUI();
             updateChart();
             updateStatsTable();
-            updateToolbarButtons();
         }
 
         function toggleJobsSelection(jobs) {
@@ -2166,13 +2144,22 @@
         }
 
         function updateURL() {
-            const encoded = encodeSelection();
             const url = new URL(window.location);
-            if (encoded) {
-                url.searchParams.set('s', encoded);
-            } else {
+            const search = jobFilterText.trim();
+            if (search) {
+                url.searchParams.set('q', search);
                 url.searchParams.delete('s');
+            } else {
+                url.searchParams.delete('q');
+
+                const encoded = encodeSelection();
+                if (encoded) {
+                    url.searchParams.set('s', encoded);
+                } else {
+                    url.searchParams.delete('s');
+                }
             }
+
             // Add time range if not default (and not custom zoom)
             if (customXMin === null && timeRangeDays !== DEFAULT_TIME_RANGE) {
                 url.searchParams.set('t', timeRangeDays);
@@ -2254,6 +2241,16 @@
 
         function applyURLParams() {
             const params = new URLSearchParams(window.location.search);
+
+            // Find the search string
+            const q = params.get('q');
+            if (q !== null) {
+                jobFilterText = q;
+                const input = document.getElementById('job-filter');
+                const clearButton = document.getElementById('job-filter-clear');
+                if (input) input.value = q;
+                if (clearButton) clearButton.style.display = q ? 'block' : 'none';
+            }
 
             // Apply time range
             const t = params.get('t');
@@ -2467,7 +2464,6 @@
                 }
             }
             // Sync the job list UI to reflect the selection
-            syncJobListUI();
             updateMatrixHighlights();
         }
 
@@ -4212,12 +4208,6 @@
             } else if (e.key === 'r') {
                 e.preventDefault();
                 if (customXMin !== null || customYMin !== null) resetZoom();
-            } else if (e.key === 'a') {
-                e.preventDefault();
-                selectAllJobs();
-            } else if (e.key === 'n') {
-                e.preventDefault();
-                deselectAllJobs();
             }
         });
 
@@ -4893,39 +4883,41 @@
             updateStatsTable();
         }
 
-        function toggleJobItem(item, jobName) {
-            if (selectedJobs.has(jobName)) {
-                selectedJobs.delete(jobName);
-                item.classList.remove('selected');
-            } else {
-                selectedJobs.add(jobName);
-                item.classList.add('selected');
+        function getVisibleJobNames() {
+            if (!data?.jobs) return [];
+            const filter = jobFilterText.trim().toLowerCase();
+            return Object.keys(data.jobs).filter(name =>
+                filter === '' || convertEmojiText(name).toLowerCase().includes(filter)
+            );
+        }
+
+        function setJobFilter(value) {
+            jobFilterText = value;
+            const clearButton = document.getElementById('job-filter-clear');
+            clearButton.style.display = value ? 'block' : 'none';
+            renderJobList();
+
+            if (jobFilterTimer !== null) {
+                clearTimeout(jobFilterTimer);
             }
-            refreshAllUI();
-            updateURL();
+
+            jobFilterTimer = setTimeout(() => {
+                selectedJobs.clear();
+                for (const name of getVisibleJobNames()) {
+                    selectedJobs.add(name);
+                }
+
+                refreshAllUI();
+                updateURL();
+                jobFilterTimer = null;
+            }, 150);
         }
 
-        function updateToolbarButtons() {
-            const total = Object.keys(data.jobs).length;
-            const selected = selectedJobs.size;
-            document.getElementById('btn-all').classList.toggle('primary', selected === total);
-            document.getElementById('btn-none').classList.toggle('primary', selected === 0);
-        }
-
-        function selectAllJobs() {
-            for (const name of Object.keys(data.jobs)) {
-                selectedJobs.add(name);
-            }
-            syncJobListUI();
-            refreshAllUI();
-            updateURL();
-        }
-
-        function deselectAllJobs() {
-            selectedJobs.clear();
-            syncJobListUI();
-            refreshAllUI();
-            updateURL();
+        function clearJobFilter() {
+            const input = document.getElementById('job-filter');
+            input.value = '';
+            setJobFilter('');
+            input.focus();
         }
 
         // Matrix organization
@@ -4985,6 +4977,16 @@
                 } else {
                     specialJobGroups['other'].push({ name, job });
                 }
+            }
+        }
+
+        function renderJobList() {
+            const listContainer = document.getElementById('job-list');
+
+            if (getVisibleJobNames().length === 0) {
+                listContainer.textContent = 'No matches';
+            } else {
+                listContainer.textContent = '';
             }
         }
 
@@ -5198,128 +5200,7 @@
                 }
             }
 
-            const getLatestDuration = (job) => job.recent?.[0]?.duration ?? 0;
-
-            // Separate jobs into groups: with current issues and without
-            const allJobs = Object.entries(data.jobs).map(([name, job]) => {
-                const issueInfo = hasRecentFailure(job);
-                const hasIssues = issueInfo.hasFailure || issueInfo.hasTimeout;
-                return { name, job, issueInfo, hasIssues };
-            });
-
-            const jobsWithIssues = allJobs
-                .filter(j => j.hasIssues)
-                .sort((a, b) => getLatestDuration(b.job) - getLatestDuration(a.job));
-
-            const jobsWithoutIssues = allJobs
-                .filter(j => !j.hasIssues)
-                .sort((a, b) => getLatestDuration(b.job) - getLatestDuration(a.job));
-
-            // Render jobs with issues first (if any)
-            if (jobsWithIssues.length > 0) {
-                const groupHeader = document.createElement('div');
-                groupHeader.className = 'job-group-header';
-                groupHeader.textContent = `Current Issues (${jobsWithIssues.length})`;
-                listContainer.appendChild(groupHeader);
-
-                for (const { name, job, issueInfo } of jobsWithIssues) {
-                    const color = jobColors[name];
-                    const pr = jobPassRates[name];
-                    const item = document.createElement('div');
-                    item.className = 'job-item' + (selectedJobs.has(name) ? ' selected' : '');
-                    item.dataset.job = name;
-                    item.onclick = () => toggleJobItem(item, name);
-                    let passRateHtml = '';
-                    if (pr && pr.total >= PASS_RATE_MIN_RUNS) {
-                        const pct = Math.round(pr.rate * 100);
-                        // Color: green=100%, yellow>=90%, red<90%
-                        let rateClass = 'green';
-                        if (pr.rate < 1) rateClass = pr.rate >= PASS_RATE_THRESHOLD ? 'yellow' : 'red';
-                        // Icons: ⚠️ if recent failure, ⏳ if recent timeout
-                        let icons = '';
-                        if (issueInfo.hasFailure) icons += '⚠️';
-                        if (issueInfo.hasTimeout) icons += '⏳';
-                        const parts = [];
-                        if (pr.failed > 0) parts.push(`${pr.failed} failed`);
-                        if (pr.timedOut > 0) parts.push(`${pr.timedOut} timed out`);
-                        if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
-                        let tooltip = parts.length > 0 ? `${parts.join(', ')} in last ${PASS_RATE_DAYS} days` : `${pr.passed}/${pr.total} passed in last ${PASS_RATE_DAYS} days`;
-                        if (issueInfo.hasFailure) {
-                            const breakageInfo = jobBreakages[name];
-                            if (breakageInfo) {
-                                tooltip += `\n${issueInfo.tooltipFailure} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`;
-                            } else {
-                                tooltip += `\n${issueInfo.tooltipFailure}`;
-                            }
-                        }
-                        if (issueInfo.hasTimeout) {
-                            tooltip += `\n${issueInfo.tooltipTimeout}`;
-                        }
-                        passRateHtml = `<span class="pass-rate ${rateClass}" title="${escapeHtml(tooltip)}">${pct}%${icons ? ' ' + icons : ''}</span>`;
-                    }
-                    const latestDuration = getLatestDuration(job);
-                    item.innerHTML = `
-                        <span class="color-dot" style="background: ${color}"></span>
-                        <span class="job-name">${convertEmoji(name)}</span>
-                        ${passRateHtml}
-                        <span class="job-median" title="Latest run">${formatDuration(latestDuration)}</span>
-                    `;
-                    listContainer.appendChild(item);
-                }
-            }
-
-            // Render jobs without issues
-            if (jobsWithoutIssues.length > 0) {
-                const groupHeader = document.createElement('div');
-                groupHeader.className = 'job-group-header';
-                groupHeader.textContent = `All Jobs (${jobsWithoutIssues.length})`;
-                listContainer.appendChild(groupHeader);
-
-                for (const { name, job, issueInfo } of jobsWithoutIssues) {
-                    const color = jobColors[name];
-                    const pr = jobPassRates[name];
-                    const item = document.createElement('div');
-                    item.className = 'job-item' + (selectedJobs.has(name) ? ' selected' : '');
-                    item.dataset.job = name;
-                    item.onclick = () => toggleJobItem(item, name);
-                    let passRateHtml = '';
-                    if (pr && pr.total >= PASS_RATE_MIN_RUNS) {
-                        const pct = Math.round(pr.rate * 100);
-                        // Color: green=100%, yellow>=90%, red<90%
-                        let rateClass = 'green';
-                        if (pr.rate < 1) rateClass = pr.rate >= PASS_RATE_THRESHOLD ? 'yellow' : 'red';
-                        // Icons: ⚠️ if recent failure, ⏳ if recent timeout
-                        let icons = '';
-                        if (issueInfo.hasFailure) icons += '⚠️';
-                        if (issueInfo.hasTimeout) icons += '⏳';
-                        const parts = [];
-                        if (pr.failed > 0) parts.push(`${pr.failed} failed`);
-                        if (pr.timedOut > 0) parts.push(`${pr.timedOut} timed out`);
-                        if (pr.canceled > 0) parts.push(`${pr.canceled} canceled`);
-                        let tooltip = parts.length > 0 ? `${parts.join(', ')} in last ${PASS_RATE_DAYS} days` : `${pr.passed}/${pr.total} passed in last ${PASS_RATE_DAYS} days`;
-                        if (issueInfo.hasFailure) {
-                            const breakageInfo = jobBreakages[name];
-                            if (breakageInfo) {
-                                tooltip += `\n${issueInfo.tooltipFailure} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`;
-                            } else {
-                                tooltip += `\n${issueInfo.tooltipFailure}`;
-                            }
-                        }
-                        if (issueInfo.hasTimeout) {
-                            tooltip += `\n${issueInfo.tooltipTimeout}`;
-                        }
-                        passRateHtml = `<span class="pass-rate ${rateClass}" title="${escapeHtml(tooltip)}">${pct}%${icons ? ' ' + icons : ''}</span>`;
-                    }
-                    const latestDuration = getLatestDuration(job);
-                    item.innerHTML = `
-                        <span class="color-dot" style="background: ${color}"></span>
-                        <span class="job-name">${convertEmoji(name)}</span>
-                        ${passRateHtml}
-                        <span class="job-median" title="Latest run">${formatDuration(latestDuration)}</span>
-                    `;
-                    listContainer.appendChild(item);
-                }
-            }
+            renderJobList();
 
             // Apply comparison mode from URL params
             applyComparisonParam();
@@ -5359,7 +5240,8 @@
 
         function updateJobCount() {
             const total = Object.keys(data.jobs).length;
-            const countText = `${selectedJobs.size}/${total}`;
+            const visible = getVisibleJobNames().length;
+            const countText = `${visible} / ${total}`;
             document.getElementById('job-count').textContent = countText;
             const mobileCount = document.getElementById('job-count-mobile');
             if (mobileCount) mobileCount.textContent = countText;
@@ -5420,7 +5302,6 @@
 
         function toggleMatrixCell(platform, version) {
             toggleJobsSelection(jobMatrix[platform][version]);
-            syncJobListUI();
             refreshAllUI();
             updateURL();
         }
@@ -5431,7 +5312,6 @@
                 jobs.push(...jobMatrix[platform][version]);
             }
             toggleJobsSelection(jobs);
-            syncJobListUI();
             refreshAllUI();
             updateURL();
         }
@@ -5444,7 +5324,6 @@
                 }
             }
             toggleJobsSelection(jobs);
-            syncJobListUI();
             refreshAllUI();
             updateURL();
         }
@@ -5455,7 +5334,6 @@
                 jobs.push(...(specialJobGroups[group] || []));
             }
             toggleJobsSelection(jobs);
-            syncJobListUI();
             refreshAllUI();
             updateURL();
         }
@@ -5466,22 +5344,14 @@
                 jobs.push(...jobMatrix[platform][version]);
             }
             toggleJobsSelection(jobs);
-            syncJobListUI();
             refreshAllUI();
             updateURL();
         }
 
         function toggleSpecialGroup(group) {
             toggleJobsSelection(specialJobGroups[group]);
-            syncJobListUI();
             refreshAllUI();
             updateURL();
-        }
-
-        function syncJobListUI() {
-            document.querySelectorAll('.job-item').forEach(el => {
-                el.classList.toggle('selected', selectedJobs.has(el.dataset.job));
-            });
         }
 
         function timeAgo(dateString) {
