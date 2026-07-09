@@ -492,6 +492,16 @@
             font-size: 11px;
             position: sticky;
             top: 0;
+            z-index: 2;
+        }
+        .stats-select-col {
+            width: 32px;
+            text-align: center !important;
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+        }
+        .stats-select-col input[type="checkbox"] {
+            cursor: pointer;
         }
         .stats-bar th.sortable {
             cursor: pointer;
@@ -1243,6 +1253,7 @@
                     <table role="table" aria-label="Job statistics">
                         <thead id="stats-thead">
                             <tr>
+                                <th scope="col" class="stats-select-col" title="Select/deselect all shown jobs"><input type="checkbox" id="stats-select-all" aria-label="Select all shown jobs" onchange="toggleAllVisibleStatsJobs(this.checked)"></th>
                                 <th scope="col" class="sortable" data-sort="job" onclick="handleStatsTableSort('job')">Job/Report <span class="sort-indicator">▲</span></th>
                                 <th scope="col">Hosts</th>
                                 <th scope="col" class="sortable" data-sort="passRate" title="Pass rate in last 14 days" onclick="handleStatsTableSort('passRate')">Pass Rate <span class="sort-indicator">▲</span></th>
@@ -1255,7 +1266,7 @@
                             </tr>
                         </thead>
                         <tbody id="stats-tbody">
-                            <tr><td colspan="9" class="loading">Loading...</td></tr>
+                            <tr><td colspan="10" class="loading">Loading...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1323,7 +1334,7 @@
 
         // Check if any selected job is a coverage job
         function hasSelectedCoverageJob() {
-            for (const jobName of selectedJobs) {
+            for (const jobName of getPlottedJobNames()) {
                 const lower = jobName.toLowerCase();
                 if (lower.includes('coverage')) return true;
             }
@@ -1364,6 +1375,69 @@
                     selectedJobs.add(name);
                 }
             }
+        }
+
+        function refreshSelectionDrivenUI() {
+            // Selection changes should be absolute: an unchecked job must not remain
+            // visible via a lingering row-hover highlight or trend overlay.
+            clearChartHighlight();
+            clearStatsRowHighlight();
+            hideRegressionLine();
+            currentTrendCell = null;
+            updateMatrixHighlights();
+            updateJobCount();
+            updateChart();
+            updateStatsTable();
+            updateURL();
+        }
+
+        function refreshChartAfterSelectionChange() {
+            // Keep checkbox clicks responsive: do not rebuild the stats table here.
+            // The browser can paint the native checkbox state first; the expensive
+            // chart update is scheduled for the next animation frame.
+            clearChartHighlight();
+            clearStatsRowHighlight();
+            hideRegressionLine();
+            currentTrendCell = null;
+            updateJobCount();
+            syncStatsSelectAllCheckbox();
+            updateURL();
+            requestAnimationFrame(() => {
+                updateMatrixHighlights();
+                updateChart();
+            });
+        }
+
+        function toggleStatsJob(jobName, checked) {
+            if (checked) {
+                selectedJobs.add(jobName);
+            } else {
+                selectedJobs.delete(jobName);
+            }
+            refreshChartAfterSelectionChange();
+        }
+
+        function toggleAllVisibleStatsJobs(checked) {
+            for (const name of getVisibleJobNames()) {
+                if (checked) {
+                    selectedJobs.add(name);
+                } else {
+                    selectedJobs.delete(name);
+                }
+            }
+            document.querySelectorAll('.stats-job-checkbox').forEach(checkbox => {
+                checkbox.checked = checked;
+            });
+            refreshChartAfterSelectionChange();
+        }
+
+        function syncStatsSelectAllCheckbox() {
+            const checkbox = document.getElementById('stats-select-all');
+            if (!checkbox) return;
+            const visible = getVisibleJobNames();
+            const selectedVisible = visible.filter(name => selectedJobs.has(name)).length;
+            checkbox.checked = visible.length > 0 && selectedVisible === visible.length;
+            checkbox.indeterminate = selectedVisible > 0 && selectedVisible < visible.length;
         }
 
         // Buildkite emoji mapping - use their actual images
@@ -1424,6 +1498,10 @@
                 result = result.replaceAll(code, emoji);
             }
             return result;
+        }
+
+        function isDefaultSelectedJob(name) {
+            return !convertEmojiText(name).toLowerCase().includes('test 1.12 short');
         }
 
         // Escape HTML special characters for safe insertion into attributes
@@ -1833,6 +1911,8 @@
         document.addEventListener('mouseover', (e) => {
             const cell = e.target.closest?.('.trend-cell');
             if (cell && cell !== currentTrendCell && cell.dataset.trend) {
+                const row = cell.closest('tr[data-job]');
+                if (row && !selectedJobs.has(row.dataset.job)) return;
                 currentTrendCell = cell;
                 try {
                     const trendData = JSON.parse(cell.dataset.trend.replace(/&#39;/g, "'"));
@@ -2812,8 +2892,10 @@
         }
 
         function updateChart() {
-            const selectedArray = Array.from(selectedJobs);
+            const selectedArray = getPlottedJobNames();
             if (selectedArray.length === 0) {
+                hideRegressionLine();
+                currentTrendCell = null;
                 if (chart) chart.destroy();
                 chart = null;
                 chartMetadata = {};
@@ -3243,8 +3325,13 @@
                 }
             }
 
+            hideRegressionLine();
+            currentTrendCell = null;
             if (chart) chart.destroy();
+            chart = null;
+            chartMetadata = {};
             highlightActive = false;  // Reset highlight state when chart is recreated
+            yAxisHighlightActive = false;
 
             const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
             const gridColor = isDark ? '#30363d' : '#d0d7de';
@@ -4221,6 +4308,7 @@
             if (!thead) return;
 
             const baseHeaders = `
+                <th scope="col" class="stats-select-col" title="Select/deselect all shown jobs"><input type="checkbox" id="stats-select-all" aria-label="Select all shown jobs" onchange="toggleAllVisibleStatsJobs(this.checked)"></th>
                 <th scope="col" class="sortable" data-sort="job" onclick="handleStatsTableSort('job')">Job/Report <span class="sort-indicator">▲</span></th>
                 <th scope="col">Hosts</th>
                 <th scope="col" class="sortable" data-sort="passRate" title="Pass rate in last 14 days" onclick="handleStatsTableSort('passRate')">Pass Rate <span class="sort-indicator">▲</span></th>
@@ -4250,17 +4338,20 @@
             updateStatsTableHeader();
 
             const colSpan = comparisonData ? 13 : 10;
-            if (selectedJobs.size === 0) {
-                tbody.innerHTML = `<tr><td colspan="${colSpan}" class="loading">Select jobs to see statistics</td></tr>`;
+            const visibleJobNames = getVisibleJobNames();
+            if (visibleJobNames.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${colSpan}" class="loading">No matching jobs</td></tr>`;
                 updateSortIndicators();
+                syncStatsSelectAllCheckbox();
                 return;
             }
 
             const { min: rangeMin, max: rangeMax } = getVisibleTimeRange();
 
-            // First, compute all stats for each job
+            // First, compute stats for each job shown by the search filter.
+            // Selection controls plotting; it no longer controls whether the row exists.
             const jobStats = [];
-            for (const jobName of selectedJobs) {
+            for (const jobName of visibleJobNames) {
                 const job = data.jobs[jobName];
                 if (!job) continue;
 
@@ -4405,13 +4496,14 @@
 
             // Render rows
 
-            // Add "All" aggregate row when multiple jobs selected
-            if (jobStats.length > 1) {
+            // Add "All" aggregate row when multiple jobs are selected among the shown jobs
+            const selectedJobStats = jobStats.filter(stat => selectedJobs.has(stat.jobName));
+            if (selectedJobStats.length > 1) {
                 // Aggregate pass rate counts
                 let allPassed = 0, allFailed = 0, allTimedOut = 0, allCanceled = 0, allRetries = 0, allTotal = 0;
                 let allN = 0;
 
-                for (const stat of jobStats) {
+                for (const stat of selectedJobStats) {
                     if (stat.pr) {
                         allPassed += stat.pr.passed;
                         allFailed += stat.pr.failed;
@@ -4426,7 +4518,7 @@
                 // Normalize each run's duration relative to its job's median
                 // This allows meaningful aggregation across jobs with different scales
                 const normalizedRuns = [];
-                for (const stat of jobStats) {
+                for (const stat of selectedJobStats) {
                     if (!stat.median || stat.median <= 0) continue;
                     const job = data.jobs[stat.jobName];
                     if (!job) continue;
@@ -4453,7 +4545,7 @@
                     // Check if any job has recent failures or timeouts for warning icons
                     let hasAnyRecentFailure = false;
                     let hasAnyRecentTimeout = false;
-                    for (const stat of jobStats) {
+                    for (const stat of selectedJobStats) {
                         const job = data.jobs[stat.jobName];
                         if (job) {
                             const issueInfo = hasRecentFailure(job);
@@ -4481,7 +4573,8 @@
                 const aggTrendResult = formatTrend(aggTrend, null, true);
                 const aggComparisonCells = comparisonData ? '<td class="comparison-col comparison-col-first"></td><td class="comparison-col"></td><td class="comparison-col"></td>' : '';
                 aggRow.innerHTML = `
-                    <td>All (${jobStats.length} jobs)</td>
+                    <td class="stats-select-col"></td>
+                    <td>All (${selectedJobStats.length} jobs)</td>
                     <td></td>
                     <td>${aggPassRateHtml}</td>
                     <td>${aggTrendResult.html}</td>
@@ -4562,9 +4655,14 @@
                 row.dataset.job = jobName;
                 if (hasMultipleHosts) {
                     row.className = `expandable${isExpanded ? ' expanded' : ''}`;
-                    row.onclick = () => toggleJobExpand(jobName);
+                    row.onclick = (event) => {
+                        if (event.target.closest('input[type="checkbox"]')) return;
+                        toggleJobExpand(jobName);
+                    };
                 }
-                row.onmouseenter = () => highlightChartDataset(color);
+                row.onmouseenter = () => {
+                    if (getPlottedJobNames().includes(jobName)) highlightChartDataset(color);
+                };
                 row.onmouseleave = () => clearChartHighlight();
                 const trendResult = formatTrend(trend, color);
                 const trendCell = trendResult.trendData
@@ -4610,6 +4708,7 @@
                 }
 
                 row.innerHTML = `
+                    <td class="stats-select-col"><input type="checkbox" class="stats-job-checkbox" data-job="${escapeHtml(jobName)}" ${selectedJobs.has(jobName) ? 'checked' : ''} aria-label="Show ${escapeHtml(convertEmojiText(jobName))}" onclick="event.stopPropagation()"></td>
                     <td><span class="color-dot" style="background: ${color}"></span> ${convertEmoji(jobName)}</td>
                     <td>${hostsHtml}</td>
                     <td>${passRateHtml}</td>
@@ -4621,6 +4720,9 @@
                     <td>${n}</td>
                     ${comparisonCells}
                 `;
+                row.querySelector('.stats-job-checkbox')?.addEventListener('change', (event) => {
+                    toggleStatsJob(jobName, event.target.checked);
+                });
                 tbody.appendChild(row);
 
                 // Add host detail rows if expanded
@@ -4723,7 +4825,9 @@
                         hostRow.className = 'host-row';
                         hostRow.dataset.job = jobName;
                         hostRow.dataset.agent = agent;
-                        hostRow.onmouseenter = () => highlightChartDataset(color, agent);
+                        hostRow.onmouseenter = () => {
+                            if (getPlottedJobNames().includes(jobName)) highlightChartDataset(color, agent);
+                        };
                         hostRow.onmouseleave = () => clearChartHighlight();
                         const hostTrendResult = formatTrend(hostTrend, hostColor);
                         const hostTrendCell = hostTrendResult.trendData
@@ -4846,6 +4950,7 @@
             }
 
             updateSortIndicators();
+            syncStatsSelectAllCheckbox();
         }
 
         function toggleJobExpand(jobName) {
@@ -4891,6 +4996,11 @@
             );
         }
 
+
+        function getPlottedJobNames() {
+            return getVisibleJobNames().filter(name => selectedJobs.has(name));
+        }
+
         function setJobFilter(value) {
             jobFilterText = value;
             const clearButton = document.getElementById('job-filter-clear');
@@ -4902,12 +5012,9 @@
             }
 
             jobFilterTimer = setTimeout(() => {
-                selectedJobs.clear();
-                for (const name of getVisibleJobNames()) {
-                    selectedJobs.add(name);
-                }
-
-                refreshAllUI();
+                updateJobCount();
+                updateChart();
+                updateStatsTable();
                 updateURL();
                 jobFilterTimer = null;
             }, 150);
@@ -5177,14 +5284,20 @@
                     if (sel && (sel.matrix.length > 0 || sel.special.length > 0 || sel.indices.length > 0)) {
                         for (const { platform, type } of sel.matrix) {
                             const jobs = jobMatrix[platform]?.[type] || [];
-                            for (const { name } of jobs) selectedJobs.add(name);
+                            for (const { name } of jobs) {
+                                if (isDefaultSelectedJob(name)) selectedJobs.add(name);
+                            }
                         }
                         for (const group of sel.special) {
                             const jobs = specialJobGroups[group] || [];
-                            for (const { name } of jobs) selectedJobs.add(name);
+                            for (const { name } of jobs) {
+                                if (isDefaultSelectedJob(name)) selectedJobs.add(name);
+                            }
                         }
                         for (const idx of sel.indices) {
-                            if (jobNameList[idx]) selectedJobs.add(jobNameList[idx]);
+                            if (jobNameList[idx] && isDefaultSelectedJob(jobNameList[idx])) {
+                                selectedJobs.add(jobNameList[idx]);
+                            }
                         }
                     }
                 }
@@ -5193,7 +5306,9 @@
                     for (const platform of platformOrder) {
                         for (const version of versionOrder) {
                             for (const { name } of (jobMatrix[platform]?.[version] || [])) {
-                                selectedJobs.add(name);
+                                if (isDefaultSelectedJob(name)) {
+                                    selectedJobs.add(name);
+                                }
                             }
                         }
                     }
@@ -5241,7 +5356,8 @@
         function updateJobCount() {
             const total = Object.keys(data.jobs).length;
             const visible = getVisibleJobNames().length;
-            const countText = `${visible} / ${total}`;
+            const selectedVisible = getVisibleJobNames().filter(name => selectedJobs.has(name)).length;
+            const countText = `${selectedVisible} selected / ${visible} shown / ${total}`;
             document.getElementById('job-count').textContent = countText;
             const mobileCount = document.getElementById('job-count-mobile');
             if (mobileCount) mobileCount.textContent = countText;
@@ -5495,14 +5611,20 @@
                             if (sel) {
                                 for (const { platform, type } of sel.matrix) {
                                     const jobs = jobMatrix[platform]?.[type] || [];
-                                    for (const { name } of jobs) selectedJobs.add(name);
+                                    for (const { name } of jobs) {
+                                        if (isDefaultSelectedJob(name)) selectedJobs.add(name);
+                                    }
                                 }
                                 for (const group of sel.special) {
                                     const jobs = specialJobGroups[group] || [];
-                                    for (const { name } of jobs) selectedJobs.add(name);
+                                    for (const { name } of jobs) {
+                                        if (isDefaultSelectedJob(name)) selectedJobs.add(name);
+                                    }
                                 }
                                 for (const idx of sel.indices) {
-                                    if (jobNameList[idx]) selectedJobs.add(jobNameList[idx]);
+                                    if (jobNameList[idx] && isDefaultSelectedJob(jobNameList[idx])) {
+                                        selectedJobs.add(jobNameList[idx]);
+                                    }
                                 }
                             }
                         }
