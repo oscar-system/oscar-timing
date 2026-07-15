@@ -3651,7 +3651,7 @@
                             }
                         },
                         y: {
-                            min: customYMin || undefined,
+                            min: customYMin ?? 0,
                             max: customYMax || undefined,
                             title: {
                                 display: true,
@@ -3669,7 +3669,7 @@
                             afterBuildTicks: (axis) => {
                                 const range = axis.max - axis.min;
                                 // Pick step size for nice round numbers
-                                const niceSteps = [60, 120, 300, 600, 900, 1800, 3600, 7200];
+                                const niceSteps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
                                 let step = niceSteps.find(s => range / s <= 10) || 7200;
                                 const minTick = Math.ceil(axis.min / step) * step;
                                 const ticks = [];
