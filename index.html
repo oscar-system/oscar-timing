@@ -1186,12 +1186,10 @@
                 <div><span class="label">Status:</span> <span id="popup-state"></span></div>
                 <div id="popup-retry-row" style="display: none;"><span class="label">Attempt:</span> <span id="popup-retry"></span></div>
                 <div><span class="label">Duration:</span> <span id="popup-duration"></span></div>
-                <div><span class="label">Agent:</span> <span id="popup-agent"></span></div>
                 <div><span class="label">Date:</span> <span id="popup-date"></span></div>
                 <div><span class="label">Commit:</span> <a id="popup-github-link" href="#" target="_blank"><code id="popup-commit"></code></a></div>
                 <div><span class="label">Title:</span> <span id="popup-message"></span></div>
                 <div><span class="label">Author:</span> <span id="popup-author"></span></div>
-                <div><span class="label">Build:</span> <a id="popup-buildkite-link" href="#" target="_blank"><span id="popup-build"></span></a></div>
                 <div id="popup-coverage-links" style="display: none;"><span class="label">Coverage:</span> <span id="popup-coverage-value"></span></div>
             </div>
         </div>
@@ -3742,20 +3740,16 @@
                 stateEl.style.color = 'var(--color-success-fg)';
                 document.getElementById('popup-duration').innerHTML =
                     '<span class="text-muted">—</span>';
-                document.getElementById('popup-agent').textContent = '(n/a)';
                 document.getElementById('popup-date').textContent = meta.date;
                 document.getElementById('popup-commit').textContent = meta.commit;
                 document.getElementById('popup-message').textContent = '(coverage data)';
                 document.getElementById('popup-author').textContent = '(n/a)';
-                document.getElementById('popup-build').textContent = `#${meta.build}`;
 
                 // Get full commit SHA from coverage data
                 const fullCommit = getFullCommitSha(meta.commit);
 
                 document.getElementById('popup-github-link').href =
                     `https://github.com/JuliaLang/julia/commit/${fullCommit}`;
-                document.getElementById('popup-buildkite-link').href =
-                    `https://buildkite.com/julialang/julia-master-scheduled/builds/${meta.build}`;
 
                 // Show coverage links
                 coverageLinksEl.style.display = '';
@@ -3789,12 +3783,10 @@
                 }
 
                 document.getElementById('popup-duration').textContent = formatDuration(meta.duration);
-                document.getElementById('popup-agent').textContent = meta.agent || '(unknown)';
                 document.getElementById('popup-date').textContent = meta.date;
                 document.getElementById('popup-commit').textContent = meta.commit;
                 document.getElementById('popup-message').textContent = meta.message || '(no message)';
                 document.getElementById('popup-author').textContent = meta.author || '(unknown)';
-                document.getElementById('popup-build').textContent = `#${meta.build}`;
 
                 document.getElementById('popup-github-link').href =
                     `https://github.com/JuliaLang/julia/commit/${meta.commit}`;
@@ -3803,9 +3795,6 @@
                 const pipeline = meta.pipeline ||
                     (meta.job.toLowerCase().includes('coverage') || meta.job.toLowerCase().includes('srcassert')
                         ? 'julia-master-scheduled' : 'julia-master');
-                document.getElementById('popup-buildkite-link').href =
-                    `https://buildkite.com/julialang/${pipeline}/builds/${meta.build}`;
-
                 // Hide coverage links for regular jobs
                 coverageLinksEl.style.display = 'none';
             }
