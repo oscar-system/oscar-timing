@@ -109,6 +109,10 @@
             align-items: center;
             gap: 8px;
         }
+        .ci-title {
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
         .oscar-logo {
             height: 18px;
             width: auto;
@@ -230,7 +234,7 @@
             width: 320px;
             background: var(--color-canvas-subtle);
             border-right: 1px solid var(--color-border-default);
-            display: none;
+            display: flex;
             flex-direction: column;
             flex-shrink: 0;
         }
@@ -1122,7 +1126,7 @@
 </head>
 <body>
     <div class="toolbar" role="toolbar" aria-label="Dashboard controls">
-        <h1><img src="https://www.oscar-system.org/public/OSCAR-Logo.svg" alt="OSCAR Timings" class="oscar-logo"><a href="https://github.com/oscar-system" target="_blank" rel="noopener noreferrer" class="link-muted">Oscar-System</a> / <a href="https://github.com/oscar-system/Oscar.jl" target="_blank" rel="noopener noreferrer" class="link-inherit">Oscar.jl</a> <span class="header-separator">|</span> CI Timing <span class="branch-badge" title="Only showing CI runs from commits to master">master</span></h1>
+        <h1><img src="https://www.oscar-system.org/public/OSCAR-Logo.svg" alt="OSCAR Timings" class="oscar-logo"><a href="https://github.com/oscar-system" target="_blank" rel="noopener noreferrer" class="link-muted">Oscar-System</a> / <a href="https://github.com/oscar-system/Oscar.jl" target="_blank" rel="noopener noreferrer" class="link-inherit">Oscar.jl</a> <span class="header-separator">|</span> <span class="ci-title">CI Timing</span> <span class="branch-badge" title="Only showing CI runs from commits to master">master</span></h1>
         <select class="time-select" id="time-range" onchange="setTimeRange(this.value)" aria-label="Time range">
             <option value="custom" disabled>Custom</option>
             <option value="7">Last 7 days</option>
@@ -1239,34 +1243,6 @@
     </div>
 
     <main class="main">
-        <aside class="sidebar" aria-label="Job selection">
-            <div class="job-matrix-wrapper">
-                <div class="section-header" id="section-matrix" onclick="toggleSection(this)">
-                    <span class="section-header-text">Platform Matrix</span>
-                </div>
-                <div class="collapsible-content">
-                    <div class="job-matrix" id="job-matrix" role="grid" aria-label="Platform and test type matrix">
-                        <div class="loading">Loading...</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="job-list-section">
-                <div class="section-header" id="section-jobs" onclick="toggleSection(this)">
-                    <span class="section-header-text">
-                        Jobs (<span id="job-count-mobile">0 / 0</span>)
-                    </span>
-                </div>
-
-                <div class="collapsible-content">
-                    <div class="job-list-header">
-                        <span>Jobs (<span id="job-count">0 / 0</span>)</span>
-                    </div>
-
-                    <div class="job-list-summary" id="job-list" aria-live="polite"></div>
-                </div>
-            </div>
-        </aside>
         <div class="content">
             <div class="chart-container">
                 <div class="chart-wrapper">
@@ -4008,15 +3984,6 @@
                 if (row.dataset.job === jobName && !row.dataset.agent) {
                     row.classList.add('chart-hover-highlight');
                     highlightedStatsRow = row;
-                    // Scroll into view if not visible
-                    const wrapper = document.getElementById('stats-wrapper');
-                    if (wrapper) {
-                        const rowRect = row.getBoundingClientRect();
-                        const wrapperRect = wrapper.getBoundingClientRect();
-                        if (rowRect.top < wrapperRect.top || rowRect.bottom > wrapperRect.bottom) {
-                            row.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                        }
-                    }
                     break;
                 }
             }
@@ -5083,6 +5050,7 @@
         function renderJobList() {
             const listContainer = document.getElementById('job-list');
 
+            if (!listContainer) return;
             if (getVisibleJobNames().length === 0) {
                 listContainer.textContent = 'No matches';
             } else {
@@ -5103,6 +5071,30 @@
             // Calculate pass rates and breakages for all jobs
             calculateAllPassRates();
             calculateAllBreakages();
+
+            selectedJobs.clear();
+            const hasURLSelection = applyURLParams() && selectedJobs.size > 0;
+            const hasComparisonMode = new URLSearchParams(window.location.search).has('c');
+
+            if (!hasURLSelection && !hasComparisonMode) {
+                const storedConfig = loadFromLocalStorage();
+                const storedSelection = decodeSelection(storedConfig?.selection);
+                if (storedSelection) {
+                    for (const idx of storedSelection.indices) {
+                        const name = jobNameList[idx];
+                        if (name && isDefaultSelectedJob(name)) selectedJobs.add(name);
+                    }
+                }
+            }
+
+            if (selectedJobs.size === 0 && !hasComparisonMode) {
+                for (const name of jobNameList) {
+                    if (isDefaultSelectedJob(name)) selectedJobs.add(name);
+                }
+            }
+
+            applyComparisonParam();
+            refreshAllUI();
         }
 
         function updateJobCount() {
@@ -5110,7 +5102,8 @@
             const visible = getVisibleJobNames().length;
             const selectedVisible = getVisibleJobNames().filter(name => selectedJobs.has(name)).length;
             const countText = `${selectedVisible} selected / ${visible} shown / ${total}`;
-            document.getElementById('job-count').textContent = countText;
+            const jobCount = document.getElementById('job-count');
+            if (jobCount) jobCount.textContent = countText;
             const mobileCount = document.getElementById('job-count-mobile');
             if (mobileCount) mobileCount.textContent = countText;
         }
@@ -5377,14 +5370,10 @@
                         }
                     }
 
-                    // If still nothing selected and not in comparison mode, select all matrix jobs
+                    // If still nothing is selected, use all default jobs.
                     if (selectedJobs.size === 0 && !hasComparisonMode) {
-                        for (const platform of platformOrder) {
-                            for (const version of versionOrder) {
-                                for (const { name } of (jobMatrix[platform]?.[version] || [])) {
-                                    selectedJobs.add(name);
-                                }
-                            }
+                        for (const name of jobNameList) {
+                            if (isDefaultSelectedJob(name)) selectedJobs.add(name);
                         }
                     }
 
@@ -5397,8 +5386,6 @@
                 console.error('Failed to load data:', err);
                 const retryBtn = '<button class="btn btn-retry" onclick="location.reload()">Retry</button>';
                 document.getElementById('chart-loading').innerHTML = `<span class="error">Failed to load data</span>${retryBtn}`;
-                document.getElementById('job-matrix').innerHTML = `<div class="error">Failed to load ${retryBtn}</div>`;
-                document.getElementById('job-list').innerHTML = `<div class="error">Failed to load jobs ${retryBtn}</div>`;
                 document.getElementById('stats-tbody').innerHTML = `
                     <tr><td colspan="10" class="error">
                         Failed to load data. Run <code>julia fetch_timing.jl</code> to generate data. ${retryBtn}
