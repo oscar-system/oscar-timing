@@ -109,6 +109,10 @@
             align-items: center;
             gap: 8px;
         }
+        .ci-title {
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
         .oscar-logo {
             height: 18px;
             width: auto;
@@ -362,6 +366,10 @@
             border: 1px solid var(--color-border-default);
             border-radius: 6px;
             color: var(--color-fg-default);
+        }
+        .toolbar-job-filter {
+            width: 220px;
+            flex-shrink: 0;
         }
         .job-filter-wrapper {
             position: relative;
@@ -1118,7 +1126,7 @@
 </head>
 <body>
     <div class="toolbar" role="toolbar" aria-label="Dashboard controls">
-        <h1><img src="https://www.oscar-system.org/public/OSCAR-Logo.svg" alt="OSCAR Timings" class="oscar-logo"><a href="https://github.com/oscar-system" target="_blank" rel="noopener noreferrer" class="link-muted">Oscar-System</a> / <a href="https://github.com/oscar-system/Oscar.jl" target="_blank" rel="noopener noreferrer" class="link-inherit">Oscar.jl</a> <span class="header-separator">|</span> CI Timing <span class="branch-badge" title="Only showing CI runs from commits to master">master</span></h1>
+        <h1><img src="https://www.oscar-system.org/public/OSCAR-Logo.svg" alt="OSCAR Timings" class="oscar-logo"><a href="https://github.com/oscar-system" target="_blank" rel="noopener noreferrer" class="link-muted">Oscar-System</a> / <a href="https://github.com/oscar-system/Oscar.jl" target="_blank" rel="noopener noreferrer" class="link-inherit">Oscar.jl</a> <span class="header-separator">|</span> <span class="ci-title">CI Timing</span> <span class="branch-badge" title="Only showing CI runs from commits to master">master</span></h1>
         <select class="time-select" id="time-range" onchange="setTimeRange(this.value)" aria-label="Time range">
             <option value="custom" disabled>Custom</option>
             <option value="7">Last 7 days</option>
@@ -1138,6 +1146,13 @@
             <option value="30">30-day avg</option>
             <option value="90">90-day avg</option>
         </select>
+        <select
+            class="time-select"
+            id="julia-version"
+            onchange="setJuliaVersion(this.value)"
+            aria-label="Julia version">
+            <option value="all">All Julia versions</option>
+        </select>
         <div class="checkbox-dropdown" id="state-filter-dropdown">
             <button class="checkbox-dropdown-btn" onclick="toggleStateDropdown(event)" aria-label="State filter">
                 <span id="state-filter-label">States (3/4)</span>
@@ -1156,6 +1171,24 @@
             <div class="checkbox-dropdown-menu" id="host-filter-menu"></div>
         </div>
         <button class="btn btn-icon" onclick="toggleShortcutsHelp()" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">?</button>
+        <div class="job-filter-wrapper toolbar-job-filter">
+            <input
+                id="job-filter"
+                class="job-filter-input"
+                type="search"
+                placeholder="Search jobs..."
+                aria-label="Search jobs"
+                oninput="setJobFilter(this.value)"
+            >
+            <button
+                id="job-filter-clear"
+                class="job-filter-clear"
+                onclick="clearJobFilter()"
+                aria-label="Clear search"
+                title="Clear search">
+                ×
+            </button>
+        </div>
         <span class="updated" id="last-updated" aria-live="polite"></span>
         <a href="https://github.com/oscar-system/oscar-timing" target="_blank" rel="noopener noreferrer" class="btn btn-link" aria-label="View source on GitHub">GitHub</a>
     </div>
@@ -1210,45 +1243,6 @@
     </div>
 
     <main class="main">
-        <aside class="sidebar" aria-label="Job selection">
-            <div class="job-matrix-wrapper">
-                <div class="section-header" id="section-matrix" onclick="toggleSection(this)"><span class="section-header-text">Platform Matrix</span></div>
-                <div class="collapsible-content">
-                    <div class="job-matrix" id="job-matrix" role="grid" aria-label="Platform and test type matrix"><div class="loading">Loading...</div></div>
-                </div>
-            </div>
-            <div class="job-list-section">
-                <div class="section-header" id="section-jobs" onclick="toggleSection(this)">
-                    <span class="section-header-text">Jobs (<span id="job-count-mobile">0 / 0</span>)</span>
-                </div>
-                <div class="collapsible-content">
-                    <div class="job-list-header">
-                        <span>Jobs (<span id="job-count">0 / 0</span>)</span>
-                    </div>
-                    <div class="job-list-controls">
-                        <div class="job-filter-wrapper">
-                            <input
-                                id="job-filter"
-                                class="job-filter-input"
-                                type="search"
-                                placeholder="Search jobs..."
-                                aria-label="Search jobs"
-                                oninput="setJobFilter(this.value)"
-                            >
-                            <button
-                                id="job-filter-clear"
-                                class="job-filter-clear"
-                                onclick="clearJobFilter()"
-                                aria-label="Clear search"
-                                title="Clear search">
-                                ×
-                            </button>
-                        </div>
-                    </div>
-                    <div class="job-list-summary" id="job-list" aria-live="polite"></div>
-                </div>
-            </div>
-        </aside>
         <div class="content">
             <div class="chart-container">
                 <div class="chart-wrapper">
@@ -1319,6 +1313,7 @@
         let data = null;
         let selectedJobs = new Set();
         let jobFilterText = '';
+        let selectedJuliaVersion = 'all';
         let jobFilterTimer = null;
         let timeRangeDays = DEFAULT_TIME_RANGE;
         let lineType = DEFAULT_LINE_TYPE;
@@ -1366,10 +1361,18 @@
             return null;
         }
 
+        function setJuliaVersion(version) {
+            selectedJuliaVersion = version;
+            updateJobCount();
+            updateChart();
+            updateStatsTable();
+            updateURL();
+        }        
+
         function refreshAllUI() {
-            updateMatrixHighlights();
             updateJobCount();
             updateHostFilterUI();
+            updateJuliaVersionFilterUI();
             updateChart();
             updateStatsTable();
         }
@@ -1393,7 +1396,6 @@
             clearStatsRowHighlight();
             hideRegressionLine();
             currentTrendCell = null;
-            updateMatrixHighlights();
             updateJobCount();
             updateChart();
             updateStatsTable();
@@ -1412,7 +1414,6 @@
             syncStatsSelectAllCheckbox();
             updateURL();
             requestAnimationFrame(() => {
-                updateMatrixHighlights();
                 updateChart();
             });
         }
@@ -2552,8 +2553,6 @@
                     selectedJobs.add(jobName);
                 }
             }
-            // Sync the job list UI to reflect the selection
-            updateMatrixHighlights();
         }
 
         // Clear comparison mode
@@ -2753,6 +2752,37 @@
             updateHostFilterLabel();
         }
 
+        function updateJuliaVersionFilterUI() {
+            const select = document.getElementById('julia-version');
+            if (!select || !data?.jobs) return;
+
+            const versions = new Set();
+
+            for (const jobName of Object.keys(data.jobs)) {
+                const lower = jobName.toLowerCase();
+                const versionMatch = lower.match(/\b1\.\d+(?:-nightly)?\b|\bnightly\b/);
+
+                if (versionMatch) {
+                    versions.add(versionMatch[0]);
+                }
+            }
+
+            const sortedVersions = [...versions].sort((a, b) =>
+                a.localeCompare(b, undefined, { numeric: true })
+            );
+
+            select.innerHTML = '<option value="all">All Julia versions</option>';
+
+            for (const version of sortedVersions) {
+                const option = document.createElement('option');
+                option.value = version;
+                option.textContent = `Julia ${version}`;
+                select.appendChild(option);
+            }
+
+            select.value = selectedJuliaVersion;
+        }        
+
         function getAllHostsFromSelectedJobs() {
             const hosts = new Set();
             const cutoff = getTimeRangeCutoff();
@@ -2794,52 +2824,6 @@
             const min = new Date();
             min.setDate(min.getDate() - timeRangeDays);
             return { min, max };
-        }
-
-        function classifyJob(name) {
-            const lower = name.toLowerCase();
-            const vstring = lower.split(" ").find(Element => Element.includes("1."))
-            // Pipeline jobs first (launch/unlock)
-            if (lower.includes('launch')) return { group: 'pipeline', type: 'pipeline' };
-            if (lower.includes('unlock')) return { group: 'pipeline', type: 'pipeline' };
-            if (lower.includes('juliasyntax')) return { group: 'juliasyntax', type: 'test' };
-            if (lower.includes('upload test results')) return { group: 'upload-results', type: 'upload' };
-            if (lower.includes('upload docs')) return { group: 'docs', type: 'upload' };
-            if (lower.includes('doctest') || lower.includes('pdf_docs')) return { group: 'docs', type: 'test' };
-
-            // Upload jobs go to special group (before platform checks)
-            if (lower.includes('upload')) return { group: 'upload', type: 'upload' };
-
-            // Platform-based grouping
-            if (lower.includes(':linux:') || lower.includes('linux')) {
-              return { group: 'linux', version: vstring }
-                if (lower.includes('coverage')) return { group: 'linux', type: 'coverage' };
-                if (lower.includes('build')) return { group: 'linux', type: 'build' };
-                if (lower.includes('test')) return { group: 'linux', type: 'test' };
-            }
-            if (lower.includes(':macos:') || lower.includes('macos') || lower.includes('darwin')) {
-                if (lower.includes('coverage')) return { group: 'macos', type: 'coverage' };
-                if (lower.includes('build')) return { group: 'macos', type: 'build' };
-                if (lower.includes('test')) return { group: 'macos', type: 'test' };
-            }
-            if (lower.includes(':windows:') || lower.includes('windows') || lower.includes('mingw')) {
-                if (lower.includes('coverage')) return { group: 'windows', type: 'coverage' };
-                if (lower.includes('build')) return { group: 'windows', type: 'build' };
-                if (lower.includes('test')) return { group: 'windows', type: 'test' };
-            }
-            if (lower.includes(':freebsd:') || lower.includes('freebsd')) {
-                if (lower.includes('coverage')) return { group: 'freebsd', type: 'coverage' };
-                if (lower.includes('build')) return { group: 'freebsd', type: 'build' };
-                if (lower.includes('test')) return { group: 'freebsd', type: 'test' };
-            }
-
-            // Special test types
-            if (['asan', 'tsan', 'analyzegc', 'llvmpasses', 'embedding', 'gcext', 'trimming'].includes(lower)) {
-                return { group: 'special', type: 'test' };
-            }
-            if (lower === 'test revise') return { group: 'special', type: 'test' };
-
-            return { group: 'other', type: 'other' };
         }
 
         /**
@@ -4000,15 +3984,6 @@
                 if (row.dataset.job === jobName && !row.dataset.agent) {
                     row.classList.add('chart-hover-highlight');
                     highlightedStatsRow = row;
-                    // Scroll into view if not visible
-                    const wrapper = document.getElementById('stats-wrapper');
-                    if (wrapper) {
-                        const rowRect = row.getBoundingClientRect();
-                        const wrapperRect = wrapper.getBoundingClientRect();
-                        if (rowRect.top < wrapperRect.top || rowRect.bottom > wrapperRect.bottom) {
-                            row.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                        }
-                    }
                     break;
                 }
             }
@@ -4989,12 +4964,24 @@
 
         function getVisibleJobNames() {
             if (!data?.jobs) return [];
-            const filter = jobFilterText.trim().toLowerCase();
-            return Object.keys(data.jobs).filter(name =>
-                filter === '' || convertEmojiText(name).toLowerCase().includes(filter)
-            );
-        }
 
+            const filter = jobFilterText.trim().toLowerCase();
+
+            return Object.keys(data.jobs).filter(name => {
+                const matchesSearch =
+                    filter === '' || convertEmojiText(name).toLowerCase().includes(filter);
+
+                if (!matchesSearch) return false;
+
+                if (selectedJuliaVersion === 'all') return true;
+
+                const lower = name.toLowerCase();
+                const versionMatch = lower.match(/\b1\.\d+(?:-nightly)?\b|\bnightly\b/);
+                const version = versionMatch ? versionMatch[0] : null;
+
+                return version === selectedJuliaVersion;
+            });
+        }
 
         function getPlottedJobNames() {
             return getVisibleJobNames().filter(name => selectedJobs.has(name));
@@ -5060,35 +5047,10 @@
         let jobMatrix = {};
         let specialJobGroups = {};
 
-        function buildJobMatrix() {
-            jobMatrix = {};
-            specialJobGroups = {};
-
-            for (const platform of platformOrder) {
-                jobMatrix[platform] = {};
-                for (const version of versionOrder) {
-                    jobMatrix[platform][version] = [];
-                }
-            }
-            for (const group of specialGroups) {
-                specialJobGroups[group] = [];
-            }
-
-            for (const [name, job] of Object.entries(data.jobs)) {
-                const { group, version } = classifyJob(name);
-                if (platformOrder.includes(group) && versionOrder.includes(version)) {
-                    jobMatrix[group][version].push({ name, job });
-                } else if (specialGroups.includes(group)) {
-                    specialJobGroups[group].push({ name, job });
-                } else {
-                    specialJobGroups['other'].push({ name, job });
-                }
-            }
-        }
-
         function renderJobList() {
             const listContainer = document.getElementById('job-list');
 
+            if (!listContainer) return;
             if (getVisibleJobNames().length === 0) {
                 listContainer.textContent = 'No matches';
             } else {
@@ -5097,7 +5059,6 @@
         }
 
         function populateJobSelector() {
-            buildJobMatrix();
             buildJobIndex();
 
             // Assign colors
@@ -5111,245 +5072,29 @@
             calculateAllPassRates();
             calculateAllBreakages();
 
-            // Build matrix table
-            renderMatrixTable();
-        }
-
-        function renderMatrixTable() {
-            const matrixContainer = document.getElementById('job-matrix');
-            let html = '<table class="matrix-table">';
-
-            // Header row
-            html += '<tr><th class="matrix-corner clickable" onclick="selectAllMatrix()" title="Select all matrix jobs">All</th>';
-            for (const version of versionOrder) {
-                html += `<th class="clickable" onclick="selectByType('${version}')">${versionLabels[version]}</th>`;
-            }
-            html += '</tr>';
-
-            // Platform rows
-            for (const platform of platformOrder) {
-                html += `<tr><th class="row-header clickable" onclick="selectByPlatform('${platform}')">${platformLabels[platform]}</th>`;
-                for (const version of versionOrder) {
-                    const jobs = jobMatrix[platform][version];
-                    const count = jobs.length;
-                    // Check if any job in this cell has recent failures/timeouts/breakages
-                    let failureTooltips = [];
-                    let timeoutTooltips = [];
-                    let breakageTooltips = [];
-                    let hasFailure = false;
-                    let hasTimeout = false;
-                    let hasBreakage = false;
-
-                    for (const { name } of jobs) {
-                        const job = data.jobs[name];
-                        if (job) {
-                            const issueInfo = hasRecentFailure(job);
-                            if (issueInfo.hasFailure) {
-                                const breakageInfo = jobBreakages[name];
-                                if (breakageInfo) {
-                                    failureTooltips.push(`${name}: ${issueInfo.failedCount}/${issueInfo.totalCount} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`);
-                                } else {
-                                    failureTooltips.push(`${name}: ${issueInfo.failedCount}/${issueInfo.totalCount}`);
-                                }
-                                hasFailure = true;
-                            }
-                            if (issueInfo.hasTimeout) {
-                                timeoutTooltips.push(`${name}: ${issueInfo.timedOutCount}/${issueInfo.totalCount}`);
-                                hasTimeout = true;
-                            }
-                            if (issueInfo.hasBreakage) {
-                                breakageTooltips.push(name);
-                                hasBreakage = true;
-                            }
-                        }
-                    }
-
-                    html += `<td class="matrix-cell" data-platform="${platform}" data-version="${version}" onclick="toggleMatrixCell('${platform}', '${version}')">`;
-                    if (count > 0) {
-                        html += `<span class="job-count">${count}</span>`;
-                        if (hasBreakage) {
-                            const tooltip = `Breakage detected:\n${breakageTooltips.join('\n')}`;
-                            html += `<span class="failure-indicator breakage-indicator" title="${escapeHtml(tooltip)}">⚡</span>`;
-                        }
-                        if (hasFailure) {
-                            const tooltip = `Currently failing:\n${failureTooltips.join('\n')}`;
-                            html += `<span class="failure-indicator" title="${escapeHtml(tooltip)}">⚠️</span>`;
-                        }
-                        if (hasTimeout) {
-                            const tooltip = `Currently timing out:\n${timeoutTooltips.join('\n')}`;
-                            html += `<span class="failure-indicator" title="${escapeHtml(tooltip)}">⏳</span>`;
-                        }
-                    } else {
-                        html += '-';
-                    }
-                    html += '</td>';
-                }
-                html += '</tr>';
-            }
-
-            // Special groups row
-            html += '<tr><th class="row-header clickable special-header" colspan="4" onclick="selectAllSpecial()" title="Toggle all special jobs">Special</th></tr>';
-            html += '<tr><td colspan="4" class="special-buttons-cell">';
-            html += '<div class="special-buttons">';
-            for (const group of specialGroups) {
-                const jobs = specialJobGroups[group];
-                if (jobs.length > 0) {
-                    let failureTooltips = [];
-                    let timeoutTooltips = [];
-                    let breakageTooltips = [];
-                    let hasFailure = false;
-                    let hasTimeout = false;
-                    let hasBreakage = false;
-
-                    for (const { name } of jobs) {
-                        const job = data.jobs[name];
-                        if (job) {
-                            const issueInfo = hasRecentFailure(job);
-                            if (issueInfo.hasFailure) {
-                                const breakageInfo = jobBreakages[name];
-                                if (breakageInfo) {
-                                    failureTooltips.push(`${name}: ${issueInfo.failedCount}/${issueInfo.totalCount} ⚡ broke at ${breakageInfo.commit.substring(0, 8)}`);
-                                } else {
-                                    failureTooltips.push(`${name}: ${issueInfo.failedCount}/${issueInfo.totalCount}`);
-                                }
-                                hasFailure = true;
-                            }
-                            if (issueInfo.hasTimeout) {
-                                timeoutTooltips.push(`${name}: ${issueInfo.timedOutCount}/${issueInfo.totalCount}`);
-                                hasTimeout = true;
-                            }
-                            if (issueInfo.hasBreakage) {
-                                breakageTooltips.push(name);
-                                hasBreakage = true;
-                            }
-                        }
-                    }
-
-                    let warnIcons = '';
-                    if (hasBreakage) warnIcons += ' ⚡';
-                    if (hasFailure) warnIcons += ' ⚠️';
-                    if (hasTimeout) warnIcons += ' ⏳';
-
-                    const jobList = jobs.map(({ name }) => convertEmojiText(name)).join('\n');
-                    let tooltip = jobList;
-                    if (hasBreakage) {
-                        tooltip += '\n\nBreakage detected:\n' + breakageTooltips.join('\n');
-                    }
-                    if (hasFailure) {
-                        tooltip += '\n\nCurrently failing:\n' + failureTooltips.join('\n');
-                    }
-                    if (hasTimeout) {
-                        tooltip += '\n\nCurrently timing out:\n' + timeoutTooltips.join('\n');
-                    }
-                    html += `<button class="btn btn-special" data-special="${group}" onclick="toggleSpecialGroup('${group}')" title="${escapeHtml(tooltip)}">${specialLabels[group]} (${jobs.length})${warnIcons}</button>`;
-                }
-            }
-            html += '</div></td></tr>';
-
-            html += '</table>';
-            matrixContainer.innerHTML = html;
-
-            // Build job list
-            const listContainer = document.getElementById('job-list');
-            listContainer.innerHTML = '';
-
-            // Apply URL params (selection and time range) or localStorage or default
-            const hasURLSelection = applyURLParams();
-
-            // Check if we're in comparison mode (takes priority over localStorage)
+            selectedJobs.clear();
+            const hasURLSelection = applyURLParams() && selectedJobs.size > 0;
             const hasComparisonMode = new URLSearchParams(window.location.search).has('c');
 
-            // Always restore stats panel height from localStorage (independent of URL params)
-            const storedConfig = loadFromLocalStorage();
-            if (storedConfig && storedConfig.statsHeight && storedConfig.statsHeight >= 50) {
-                document.getElementById('stats-wrapper').style.height = storedConfig.statsHeight + 'px';
-            }
-
             if (!hasURLSelection && !hasComparisonMode) {
-                // Try localStorage for other settings
-                if (storedConfig) {
-                    // Apply stored time range
-                    if (storedConfig.timeRange !== undefined && [0, 7, 14, 30, 60, 90, 120, 240, 365].includes(storedConfig.timeRange)) {
-                        timeRangeDays = storedConfig.timeRange;
-                        document.getElementById('time-range').value = storedConfig.timeRange;
-                    }
-                    // Apply stored line type
-                    if (storedConfig.lineType && ['raw', '7', '30', '90'].includes(storedConfig.lineType)) {
-                        lineType = storedConfig.lineType;
-                        document.getElementById('line-type').value = storedConfig.lineType;
-                    }
-                    // Apply stored selection
-                    const sel = decodeSelection(storedConfig.selection);
-                    if (sel && (sel.matrix.length > 0 || sel.special.length > 0 || sel.indices.length > 0)) {
-                        for (const { platform, type } of sel.matrix) {
-                            const jobs = jobMatrix[platform]?.[type] || [];
-                            for (const { name } of jobs) {
-                                if (isDefaultSelectedJob(name)) selectedJobs.add(name);
-                            }
-                        }
-                        for (const group of sel.special) {
-                            const jobs = specialJobGroups[group] || [];
-                            for (const { name } of jobs) {
-                                if (isDefaultSelectedJob(name)) selectedJobs.add(name);
-                            }
-                        }
-                        for (const idx of sel.indices) {
-                            if (jobNameList[idx] && isDefaultSelectedJob(jobNameList[idx])) {
-                                selectedJobs.add(jobNameList[idx]);
-                            }
-                        }
-                    }
-                }
-                // If still nothing selected, select all platform jobs by default
-                if (selectedJobs.size === 0) {
-                    for (const platform of platformOrder) {
-                        for (const version of versionOrder) {
-                            for (const { name } of (jobMatrix[platform]?.[version] || [])) {
-                                if (isDefaultSelectedJob(name)) {
-                                    selectedJobs.add(name);
-                                }
-                            }
-                        }
+                const storedConfig = loadFromLocalStorage();
+                const storedSelection = decodeSelection(storedConfig?.selection);
+                if (storedSelection) {
+                    for (const idx of storedSelection.indices) {
+                        const name = jobNameList[idx];
+                        if (name && isDefaultSelectedJob(name)) selectedJobs.add(name);
                     }
                 }
             }
 
-            renderJobList();
+            if (selectedJobs.size === 0 && !hasComparisonMode) {
+                for (const name of jobNameList) {
+                    if (isDefaultSelectedJob(name)) selectedJobs.add(name);
+                }
+            }
 
-            // Apply comparison mode from URL params
             applyComparisonParam();
-
             refreshAllUI();
-        }
-
-        function updateMatrixHighlights() {
-            // Update platform/type cells
-            for (const platform of platformOrder) {
-                for (const version of versionOrder) {
-                    const cell = document.querySelector(`.matrix-cell[data-platform="${platform}"][data-version="${version}"]`);
-                    if (!cell) continue;
-                    const jobs = jobMatrix[platform][version];
-                    const selectedCount = jobs.filter(j => selectedJobs.has(j.name)).length;
-                    cell.classList.remove('has-selection', 'partial-selection');
-                    if (selectedCount === jobs.length && jobs.length > 0) {
-                        cell.classList.add('has-selection');
-                    } else if (selectedCount > 0) {
-                        cell.classList.add('partial-selection');
-                    }
-                }
-            }
-
-            // Update special group buttons
-            for (const group of specialGroups) {
-                const btn = document.querySelector(`button[data-special="${group}"]`);
-                if (!btn) continue;
-                const jobs = specialJobGroups[group];
-                const selectedCount = jobs.filter(j => selectedJobs.has(j.name)).length;
-                btn.classList.remove('primary');
-                if (selectedCount === jobs.length && jobs.length > 0) {
-                    btn.classList.add('primary');
-                }
-            }
         }
 
         function updateJobCount() {
@@ -5357,7 +5102,8 @@
             const visible = getVisibleJobNames().length;
             const selectedVisible = getVisibleJobNames().filter(name => selectedJobs.has(name)).length;
             const countText = `${selectedVisible} selected / ${visible} shown / ${total}`;
-            document.getElementById('job-count').textContent = countText;
+            const jobCount = document.getElementById('job-count');
+            if (jobCount) jobCount.textContent = countText;
             const mobileCount = document.getElementById('job-count-mobile');
             if (mobileCount) mobileCount.textContent = countText;
         }
@@ -5487,9 +5233,6 @@
 
         async function loadData() {
             try {
-                // Render empty matrix skeleton immediately
-                renderMatrixSkeleton();
-
                 const resp = await fetch('data/timing_summary.json');
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
@@ -5579,7 +5322,6 @@
                     document.getElementById('chart-loading').style.display = 'none';
                 } else {
                     // Update with complete data - rebuild matrix with all jobs
-                    buildJobMatrix();
                     buildJobIndex();
 
                     // Reassign colors for any new jobs from complete data
@@ -5591,8 +5333,7 @@
 
                     // Recalculate pass rates with complete data and re-render matrix
                     calculateAllPassRates();
-                calculateAllBreakages();
-                    renderMatrixTable();
+                    calculateAllBreakages();
 
                     // Re-apply URL params with complete data to get full selection
                     // (partial data may have missed some jobs in matrix cells)
@@ -5629,14 +5370,10 @@
                         }
                     }
 
-                    // If still nothing selected and not in comparison mode, select all matrix jobs
+                    // If still nothing is selected, use all default jobs.
                     if (selectedJobs.size === 0 && !hasComparisonMode) {
-                        for (const platform of platformOrder) {
-                            for (const version of versionOrder) {
-                                for (const { name } of (jobMatrix[platform]?.[version] || [])) {
-                                    selectedJobs.add(name);
-                                }
-                            }
+                        for (const name of jobNameList) {
+                            if (isDefaultSelectedJob(name)) selectedJobs.add(name);
                         }
                     }
 
@@ -5649,8 +5386,6 @@
                 console.error('Failed to load data:', err);
                 const retryBtn = '<button class="btn btn-retry" onclick="location.reload()">Retry</button>';
                 document.getElementById('chart-loading').innerHTML = `<span class="error">Failed to load data</span>${retryBtn}`;
-                document.getElementById('job-matrix').innerHTML = `<div class="error">Failed to load ${retryBtn}</div>`;
-                document.getElementById('job-list').innerHTML = `<div class="error">Failed to load jobs ${retryBtn}</div>`;
                 document.getElementById('stats-tbody').innerHTML = `
                     <tr><td colspan="10" class="error">
                         Failed to load data. Run <code>julia fetch_timing.jl</code> to generate data. ${retryBtn}
@@ -5687,35 +5422,6 @@
             } catch (e) {
                 return null;
             }
-        }
-
-        // Render empty matrix immediately so users see structure
-        function renderMatrixSkeleton() {
-            const matrixContainer = document.getElementById('job-matrix');
-            let html = '<table class="matrix-table">';
-
-            // Header row
-            html += '<tr><th class="matrix-corner" title="Loading...">⋯</th>';
-            for (const version of versionOrder) {
-                html += `<th>${versionLabels[version]}</th>`;
-            }
-            html += '</tr>';
-
-            // Platform rows with loading placeholders
-            for (const platform of platformOrder) {
-                html += `<tr><th class="row-header">${platformLabels[platform]}</th>`;
-                for (const version of versionOrder) {
-                    html += `<td class="matrix-cell" data-platform="${platform}" data-type="${version}">⋯</td>`;
-                }
-                html += '</tr>';
-            }
-
-            // Special groups placeholder
-            html += '<tr><th class="row-header special-header" colspan="4">Special</th></tr>';
-            html += '<tr><td colspan="4" class="loading loading-small">Loading special jobs...</td></tr>';
-
-            html += '</table>';
-            matrixContainer.innerHTML = html;
         }
 
         /**
