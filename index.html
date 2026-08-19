@@ -13,7 +13,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         /* GitHub-style colors with automatic light/dark mode */
         :root {
@@ -3679,7 +3679,7 @@
                 if (row.dataset.job === jobName && !row.dataset.agent) {
                     row.classList.add('chart-hover-highlight');
                     highlightedStatsRow = row;
-                    // Scroll into view if not visible
+                    // Scroll the stats list to reflect the current selection on the graph
                     const wrapper = document.getElementById('stats-wrapper');
                     if (wrapper) {
                         const rowRect = row.getBoundingClientRect();
