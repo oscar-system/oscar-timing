@@ -13,7 +13,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         /* GitHub-style colors with automatic light/dark mode */
         :root {
@@ -1018,7 +1018,6 @@
         const DEFAULT_TIME_RANGE = 30;
         const DEFAULT_LINE_TYPE = '7';
         const STORAGE_KEY = 'julia-ci-timing-config';
-        const DATA_REFRESH_INTERVAL = 5 * 60 * 1000;  // 5 minutes
         const AGO_UPDATE_INTERVAL = 60 * 1000;        // 1 minute
 
         // Data freshness
@@ -1904,7 +1903,6 @@
             } else {
                 url.searchParams.delete('l');
             }
-            url.searchParams.delete('e');
             // Add excluded states if different from default (canceled only)
             const defaultExcluded = new Set(['canceled']);
             const isDefaultStates = excludedStates.size === defaultExcluded.size &&
@@ -4515,35 +4513,7 @@
             }
         }
 
-        async function refreshData() {
-            try {
-                const resp = await fetch('data/timing_summary.json');
-                if (!resp.ok) return;
-                const newData = await resp.json();
-
-                // Only update if data actually changed
-                if (newData.generated_at !== data.generated_at) {
-                    data = newData;
-                    const updatedEl = document.getElementById('last-updated');
-                    updatedEl.textContent = `Updated ${timeAgo(data.generated_at)}`;
-                    updatedEl.title = data.generated_at;
-                    checkStaleData(data.generated_at);
-                    updateChart();
-                    updateStatsTable();
-                } else {
-                    // Update the "ago" time even if data hasn't changed
-                    const updatedEl = document.getElementById('last-updated');
-                    updatedEl.textContent = `Updated ${timeAgo(data.generated_at)}`;
-                }
-            } catch (err) {
-                // Silently ignore refresh errors
-            }
-        }
-
         loadData();
-
-        // Auto-refresh data periodically
-        setInterval(refreshData, DATA_REFRESH_INTERVAL);
 
         // Update "ago" time periodically
         setInterval(() => {
