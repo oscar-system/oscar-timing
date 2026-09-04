@@ -1278,7 +1278,9 @@
         }
 
         function isDefaultSelectedJob(name) {
-            return !convertEmojiText(name).toLowerCase().includes('test 1.12 short');
+            const normalizedName = convertEmojiText(name).toLowerCase();
+            return !normalizedName.includes('test 1.12 short') &&
+                   !normalizedName.includes('test 1.12 long');
         }
 
         // Escape HTML special characters for safe insertion into attributes
