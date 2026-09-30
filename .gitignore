@@ -1,3 +1,12 @@
+# Data files are tracked but can be regenerated
+# Uncomment if you don't want to track them:
+# data/
+
+# Julia
+*.jl.cov
+*.jl.mem
+Manifest.toml
+
 # OS
 .DS_Store
 Thumbs.db
@@ -8,3 +17,4 @@ Thumbs.db
 *~
 .vscode/
 .idea/
+.julia-repo-cache

@@ -245,20 +245,6 @@
             touch-action: none; /* Let Chart.js handle all touch events */
             max-width: 100% !important;
         }
-        .chart-empty {
-            position: absolute;
-            inset: 0;
-            display: grid;
-            place-items: center;
-            pointer-events: none;
-        }
-        .chart-empty[hidden] { display: none; }
-        .chart-empty span {
-            padding: 12px;
-            background: var(--color-canvas-default);
-            color: var(--color-fg-muted);
-            text-align: center;
-        }
 
         /* Stats bar */
         .stats-wrapper {
@@ -807,7 +793,6 @@
                 <div class="chart-wrapper">
                     <div class="loading-overlay" id="chart-loading"><span class="loading">Loading chart data...</span></div>
                     <canvas id="timing-chart" role="img" aria-label="CI timing chart"></canvas>
-                    <div class="chart-empty" id="chart-empty" role="status" hidden><span></span></div>
                 </div>
             </div>
             <div class="stats-wrapper" id="stats-wrapper">
@@ -867,9 +852,6 @@
         let timeRangeDays = DEFAULT_TIME_RANGE;
         let lineType = DEFAULT_LINE_TYPE;
         let jobColors = {};
-        let jobInfo = new Map();
-        const statsCache = new Map();
-        let statsCacheRange = null;
         // Custom zoom state (null = use timeRangeDays preset)
         let customXMin = null;  // timestamp or null
         let customXMax = null;  // timestamp or null
@@ -886,7 +868,6 @@
         }        
 
         function refreshAllUI() {
-            updateJuliaVersionFilterUI();
             updateChart();
             updateStatsTable();
         }
@@ -903,7 +884,6 @@
             updateURL();
             requestAnimationFrame(() => {
                 updateChart();
-                updateStatsTable();
             });
         }
 
@@ -944,12 +924,6 @@
 
         function getStatsJobNames() {
             return Array.from(document.querySelectorAll('#stats-tbody tr[data-job]'), row => row.dataset.job);
-        }
-
-        function isDefaultSelectedJob(name) {
-            const normalizedName = convertEmojiText(name).toLowerCase();
-            return !normalizedName.includes('test 1.12 short') &&
-                   !normalizedName.includes('test 1.12 long');
         }
 
         // Buildkite emoji mapping - use their actual images
@@ -1012,6 +986,12 @@
             return result;
         }
 
+
+        function isDefaultSelectedJob(name) {
+            const normalizedName = convertEmojiText(name).toLowerCase();
+            return !normalizedName.includes('test 1.12 short') &&
+                   !normalizedName.includes('test 1.12 long');
+        }
 
         // Escape HTML special characters for safe insertion into attributes
         function escapeHtml(text) {
@@ -1091,7 +1071,7 @@
             };
         }
 
-        function formatTrend(trend, lineColor = null, percentageMode = false) {
+        function formatTrend(trend, lineColor = null) {
             if (!trend || trend.n < TREND_MIN_POINTS) {
                 return { html: '<span class="text-muted" title="Not enough data points">—</span>', trendData: null };
             }
@@ -1101,10 +1081,7 @@
 
             // Convert slope to human-readable format (per day)
             let slopeText;
-            if (percentageMode) {
-                // For percentage mode, slope is in %/day
-                slopeText = `${slope >= 0 ? '+' : ''}${slope.toFixed(2)}%/day`;
-            } else if (absSlope < 1) {
+            if (absSlope < 1) {
                 slopeText = `${absSlope.toFixed(2)}s/day`;
             } else if (absSlope < 60) {
                 slopeText = `${absSlope.toFixed(1)}s/day`;
@@ -1114,16 +1091,11 @@
 
             // Format absolute delta
             let deltaText;
-            if (percentageMode) {
-                // For percentage mode, delta is in percentage points
-                deltaText = `${absoluteDelta >= 0 ? '+' : ''}${absoluteDelta.toFixed(1)}pp`;
+            const absDelta = Math.abs(absoluteDelta);
+            if (absDelta < 60) {
+                deltaText = `${absoluteDelta >= 0 ? '+' : '-'}${absDelta.toFixed(1)}s`;
             } else {
-                const absDelta = Math.abs(absoluteDelta);
-                if (absDelta < 60) {
-                    deltaText = `${absoluteDelta >= 0 ? '+' : '-'}${absDelta.toFixed(1)}s`;
-                } else {
-                    deltaText = `${absoluteDelta >= 0 ? '+' : '-'}${(absDelta / 60).toFixed(1)}m`;
-                }
+                deltaText = `${absoluteDelta >= 0 ? '+' : '-'}${(absDelta / 60).toFixed(1)}m`;
             }
 
             // Format percentage change
@@ -1473,7 +1445,6 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                 yAxis.max
             );
             updateStatsTable();
-            updateChartEmptyState();
         }
 
         function resetZoom() {
@@ -1520,15 +1491,8 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
         }        
 
         function getTimeRangeCutoff() {
-            // When custom x-range is set, use it for cutoff (with some padding for smoothing)
-            if (customXMin !== null) {
-                // Add 90 days padding before customXMin to support smoothing calculations
-                return new Date(customXMin - 90 * 24 * 60 * 60 * 1000);
-            }
-            if (timeRangeDays === 0) return null;  // All time
-            const cutoff = new Date();
-            cutoff.setDate(cutoff.getDate() - timeRangeDays);
-            return cutoff;
+            const { min } = getVisibleTimeRange();
+            return min && new Date(min.getTime() - (lineType === 'raw' ? 0 : Number(lineType)) * 86400000);
         }
 
         // Get visible time range bounds for stats (respects custom zoom)
@@ -1543,18 +1507,8 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             return { min, max };
         }
 
-        /**
-         * Compute temporal moving average with Gaussian window.
-         * Uses a Gaussian kernel for smooth weighting - points closer to the center
-         * have more influence than distant points, producing smoother curves than
-         * rectangular windows.
-         *
-         * @param {Array<Object>} points - Array of {x: Date, y: number} data points
-         * @param {number} windowDays - Size of averaging window in days (effective width ~3σ)
-         * @returns {Array<Object>} Smoothed data points resampled at even intervals
-         */
+        /** Compute a trailing time-window average at each observation. */
         function computeMovingAverage(points, windowDays) {
-            if (points.length < 2) return points.map(point => ({ x: point.x, y: point.y }));
             const sorted = [...points].sort((a, b) => a.x - b.x);
             const windowMs = windowDays * 86400000;
             const result = [];
@@ -1568,24 +1522,7 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             return result;
         }
 
-        function updateChartEmptyState() {
-            const visible = getVisibleJobNames();
-            const plotted = visible.filter(name => selectedJobs.has(name));
-            const { min, max } = getVisibleTimeRange();
-            const hasRuns = plotted.some(name => data.jobs[name].recent.some(run => {
-                const date = new Date(run.date);
-                return (!min || date >= min) && (!max || date <= max);
-            }));
-            const message = visible.length === 0 ? 'No matching jobs.' :
-                plotted.length === 0 ? 'No jobs selected. Select jobs in the table below.' :
-                !hasRuns ? 'No timing data in this time range. Choose another time range or reset the chart.' : '';
-            const empty = document.getElementById('chart-empty');
-            empty.querySelector('span').textContent = message;
-            empty.hidden = message === '';
-        }
-
         function updateChart() {
-            updateChartEmptyState();
             const selectedArray = getPlottedJobNames();
             if (selectedArray.length === 0) {
                 hideRegressionLine();
@@ -1819,163 +1756,9 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                             ticks: {
                                 color: textColor,
                                 maxRotation: 45,
-                                callback: function(value, index, ticks) {
-                                    // Hide labels for minor ticks
-                                    if (ticks[index] && ticks[index].minor) {
-                                        return '';
-                                    }
-
-                                    const date = new Date(value);
-                                    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-                                    // Determine time range to decide format (only count major ticks)
-                                    const majorTicks = ticks.filter(t => !t.minor);
-                                    const rangeMs = majorTicks.length >= 2
-                                        ? majorTicks[majorTicks.length - 1].value - majorTicks[0].value
-                                        : Infinity;
-                                    const MINUTE = 60 * 1000;
-                                    const HOUR = 60 * MINUTE;
-                                    const DAY = 24 * HOUR;
-
-                                    const hours = date.getHours().toString().padStart(2, '0');
-                                    const mins = date.getMinutes().toString().padStart(2, '0');
-                                    const secs = date.getSeconds().toString().padStart(2, '0');
-
-                                    // Find previous major tick for date comparison
-                                    let prevMajorTick = null;
-                                    for (let i = index - 1; i >= 0; i--) {
-                                        if (!ticks[i].minor) {
-                                            prevMajorTick = ticks[i];
-                                            break;
-                                        }
-                                    }
-                                    const prevDate = prevMajorTick ? new Date(prevMajorTick.value) : null;
-                                    const isFirstMajor = !prevMajorTick;
-
-                                    // For ranges under 10 minutes, show seconds
-                                    if (rangeMs < 10 * MINUTE) {
-                                        const timeStr = `${hours}:${mins}:${secs}`;
-                                        if (isFirstMajor) {
-                                            return `${months[date.getMonth()]} ${date.getDate()} ${timeStr}`;
-                                        }
-                                        if (prevDate && prevDate.getDate() !== date.getDate()) {
-                                            return `${months[date.getMonth()]} ${date.getDate()} ${timeStr}`;
-                                        }
-                                        return timeStr;
-                                    }
-
-                                    // For ranges under 3 days, show time (hours:minutes)
-                                    if (rangeMs < 3 * DAY) {
-                                        const timeStr = `${hours}:${mins}`;
-                                        // Show date on first tick or when date changes
-                                        if (isFirstMajor) {
-                                            return `${months[date.getMonth()]} ${date.getDate()} ${timeStr}`;
-                                        }
-                                        if (prevDate && prevDate.getDate() !== date.getDate()) {
-                                            return `${months[date.getMonth()]} ${date.getDate()} ${timeStr}`;
-                                        }
-                                        return timeStr;
-                                    }
-
-                                    // Default: day-level labels
-                                    const label = `${months[date.getMonth()]} ${date.getDate()}`;
-                                    // Show year on first tick and when year changes
-                                    if (isFirstMajor) {
-                                        return `${label} '${date.getFullYear().toString().slice(-2)}`;
-                                    }
-                                    if (prevDate && prevDate.getFullYear() !== date.getFullYear()) {
-                                        return `${label} '${date.getFullYear().toString().slice(-2)}`;
-                                    }
-                                    return label;
-                                }
+                                maxTicksLimit: 12
                             },
-                            grid: {
-                                color: (ctx) => {
-                                    // Minor grid lines are lighter
-                                    if (ctx.tick && ctx.tick.minor) {
-                                        return isDark ? 'rgba(48, 54, 61, 0.5)' : 'rgba(208, 215, 222, 0.5)';
-                                    }
-                                    return gridColor;
-                                }
-                            },
-                            afterBuildTicks: (axis) => {
-                                const rangeMs = axis.max - axis.min;
-                                const SECOND = 1000;
-                                const MINUTE = 60 * SECOND;
-                                const HOUR = 60 * MINUTE;
-                                const DAY = 24 * HOUR;
-
-                                // Nice intervals from seconds to months, with minor tick subdivisions
-                                const niceStepsWithMinor = [
-                                    { step: 5*SECOND, minor: SECOND },
-                                    { step: 10*SECOND, minor: 2*SECOND },
-                                    { step: 15*SECOND, minor: 5*SECOND },
-                                    { step: 30*SECOND, minor: 10*SECOND },
-                                    { step: MINUTE, minor: 15*SECOND },
-                                    { step: 2*MINUTE, minor: 30*SECOND },
-                                    { step: 5*MINUTE, minor: MINUTE },
-                                    { step: 10*MINUTE, minor: 2*MINUTE },
-                                    { step: 15*MINUTE, minor: 5*MINUTE },
-                                    { step: 30*MINUTE, minor: 10*MINUTE },
-                                    { step: HOUR, minor: 15*MINUTE },
-                                    { step: 2*HOUR, minor: 30*MINUTE },
-                                    { step: 4*HOUR, minor: HOUR },
-                                    { step: 6*HOUR, minor: 2*HOUR },
-                                    { step: 12*HOUR, minor: 3*HOUR },
-                                    { step: DAY, minor: 6*HOUR },
-                                    { step: 2*DAY, minor: DAY },
-                                    { step: 7*DAY, minor: DAY },
-                                    { step: 14*DAY, minor: 7*DAY },
-                                    { step: 30*DAY, minor: 7*DAY }
-                                ];
-
-                                // Find smallest step that gives <= 12 major ticks
-                                const config = niceStepsWithMinor.find(c => rangeMs / c.step <= 12);
-                                // Keep Chart.js ticks for ranges beyond our custom intervals.
-                                if (!config) return;
-                                const step = config.step;
-                                const minorStep = config.minor;
-
-                                // Round min to appropriate boundary
-                                const minDate = new Date(axis.min);
-                                let minTick;
-
-                                if (step < MINUTE) {
-                                    // Align to second boundary
-                                    minDate.setMilliseconds(0);
-                                    minTick = minDate.getTime();
-                                } else if (step < HOUR) {
-                                    // Align to minute boundary
-                                    minDate.setSeconds(0, 0);
-                                    minTick = minDate.getTime();
-                                } else if (step < DAY) {
-                                    // Align to hour boundary
-                                    minDate.setMinutes(0, 0, 0);
-                                    minTick = minDate.getTime();
-                                } else if (step < 7*DAY) {
-                                    // Align to day boundary
-                                    minDate.setHours(0, 0, 0, 0);
-                                    minTick = minDate.getTime();
-                                } else {
-                                    // Align to week boundary (Sunday)
-                                    minDate.setHours(0, 0, 0, 0);
-                                    minTick = minDate.getTime();
-                                    const dayOfWeek = minDate.getDay();
-                                    minTick -= dayOfWeek * DAY;
-                                }
-
-                                // Move to first tick after axis.min
-                                while (minTick < axis.min) minTick += minorStep;
-
-                                // Generate ticks with minor flag
-                                const ticks = [];
-                                for (let v = minTick; v <= axis.max; v += minorStep) {
-                                    // Check if this is a major tick (aligned to step)
-                                    const isMajor = Math.abs(v % step) < minorStep / 2 || Math.abs((v % step) - step) < minorStep / 2;
-                                    ticks.push({ value: v, major: isMajor, minor: !isMajor });
-                                }
-                                if (ticks.length > 0) axis.ticks = ticks;
-                            }
+                            grid: { color: gridColor }
                         },
                         y: {
                             min: customYMin ?? 0,
@@ -1988,24 +1771,10 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                             ticks: {
                                 color: textColor,
                                 callback: (v) => formatDuration(v),
-                                // Use nice intervals: 1m, 2m, 5m, 10m, 15m, 30m, 1h, 2h
                                 autoSkip: true,
                                 maxTicksLimit: 10
                             },
-                            grid: { color: gridColor },
-                            afterBuildTicks: (axis) => {
-                                const range = axis.max - axis.min;
-                                // Pick step size for nice round numbers
-                                const niceSteps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
-                                const step = niceSteps.find(s => range / s <= 10);
-                                if (!step || axis.min + step === axis.min || axis.max + step === axis.max) return;
-                                const minTick = Math.ceil(axis.min / step) * step;
-                                const ticks = [];
-                                for (let v = minTick; v <= axis.max; v += step) {
-                                    ticks.push({ value: v });
-                                }
-                                if (ticks.length > 0) axis.ticks = ticks;
-                            }
+                            grid: { color: gridColor }
                         },
                     },
                     onClick: (evt, elements) => {
@@ -2243,11 +2012,6 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             }
 
             const { min: rangeMin, max: rangeMax } = getVisibleTimeRange();
-            const rangeKey = `${rangeMin?.getTime() ?? ''}:${rangeMax?.getTime() ?? ''}`;
-            if (rangeKey !== statsCacheRange) {
-                statsCache.clear();
-                statsCacheRange = rangeKey;
-            }
 
             // First, compute stats for each job shown by the search filter.
             // Selection controls plotting; it no longer controls whether the row exists.
@@ -2256,12 +2020,6 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                 const job = data.jobs[jobName];
                 if (!job) continue;
 
-                const cacheKey = `${jobName}\0${rangeMin?.getTime() ?? ''}\0${rangeMax?.getTime() ?? ''}`;
-                const cached = statsCache.get(cacheKey);
-                if (cached) {
-                    jobStats.push(cached);
-                    continue;
-                }
                 const filtered = filterRunsByDate(job.recent, rangeMin, rangeMax);
                 if (filtered.length === 0) continue;
 
@@ -2280,7 +2038,7 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                     trend = computeTrend(filtered);
                 }
 
-                const stats = {
+                jobStats.push({
                     jobName,
                     color: jobColors[jobName],
                     median,
@@ -2290,9 +2048,7 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                     std,
                     trend,
                     n: filtered.length
-                };
-                statsCache.set(cacheKey, stats);
-                jobStats.push(stats);
+                });
             }
 
             if (jobStats.length === 0) {
@@ -2410,10 +2166,19 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
 
             const filter = jobFilterText.trim().toLowerCase();
 
-            return jobNameList.filter(name => {
-                const info = jobInfo.get(name);
-                return (filter === '' || info.searchText.includes(filter)) &&
-                    (selectedJuliaVersion === 'all' || info.version === selectedJuliaVersion);
+            return Object.keys(data.jobs).filter(name => {
+                const matchesSearch =
+                    filter === '' || convertEmojiText(name).toLowerCase().includes(filter);
+
+                if (!matchesSearch) return false;
+
+                if (selectedJuliaVersion === 'all') return true;
+
+                const lower = name.toLowerCase();
+                const versionMatch = lower.match(/\b1\.\d+(?:-nightly)?\b|\bnightly\b/);
+                const version = versionMatch ? versionMatch[0] : null;
+
+                return version === selectedJuliaVersion;
             });
         }
 
@@ -2451,12 +2216,8 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             // Assign colors
             const allJobs = Object.keys(data.jobs);
             const colors = generateColors(allJobs.length);
-            jobInfo = new Map();
             allJobs.forEach((name, i) => {
                 jobColors[name] = colors[i];
-                const searchText = convertEmojiText(name).toLowerCase();
-                const match = searchText.match(/\b1\.\d+(?:-nightly)?\b|\bnightly\b/);
-                jobInfo.set(name, { searchText, version: match?.[0] ?? null });
             });
         }
 
@@ -2507,7 +2268,6 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                     }
                 }
                 data = payload;
-                statsCache.clear();
 
                 const updatedEl = document.getElementById("last-updated");
                 updatedEl.textContent = "Updated " + timeAgo(data.generated_at);
@@ -2538,15 +2298,13 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                 refreshAllUI();
                 document.getElementById("chart-loading").style.display = "none";
             } catch (error) {
-                console.error("Failed to load timing data:", error);
-                const invalidData = error instanceof SyntaxError || error.message.includes("schema") || error.message.includes("series") || error.message.includes("timestamp") || error.message.includes("duration");
-                const errorText = invalidData ? "Timing data is invalid" : "Failed to load timing data";
+                console.error("Failed to load data:", error);
                 const retryButton = "<button class=\"btn btn-retry\" onclick=\"location.reload()\">Retry</button>";
                 document.getElementById("chart-loading").style.display = "";
                 document.getElementById("chart-loading").innerHTML =
-                    `<span class="error">${errorText}</span>` + retryButton;
+                    "<span class=\"error\">Failed to load data</span>" + retryButton;
                 document.getElementById("stats-tbody").innerHTML =
-                    `<tr><td colspan="8" class="error">${errorText}. ${retryButton}</td></tr>`;
+                    "<tr><td colspan=\"8\" class=\"error\">Failed to load data. " + retryButton + "</td></tr>";
             }
         }
 

@@ -1,44 +1,34 @@
 # OSCAR Timing Dashboard
 
-A focused static dashboard for visualizing OSCAR benchmark timings.
+This repository provides a web dashboard which collects,
+visualizes, and compares timing information from the OSCAR benchmark
+infrastructure.
 
-## Live dashboard
+## Live Dashboard
 
-<https://speed.oscar-system.org>
+Visit: **https://speed.oscar-system.org**
 
-## Run locally
+## How to run locally
 
-From the repository root, run:
+From the repository root, execute
 
 ```bash
 python3 -m http.server
 ```
 
-Open the URL shown in the terminal. Opening `index.html` directly does not work
-because browsers block its JSON request from a `file:` URL.
+and open the link shown in the terminal.
 
-On a first visit, individual jobs are selected by default; the aggregate
-`test 1.12 short` and `test 1.12 long` jobs start unchecked. Saved or shared
-selections override this default, including an explicitly empty selection.
+## Data Pipeline
 
-The job counter shows selected and available jobs in the current time range,
-search, and Julia version. Its total includes every series in the data file,
-including historical and aggregate jobs, so these counts can differ.
+A dedicated server (`build-bench`) periodically (approximately every
+three hours) fetches the latest changes from the OSCAR repository. If
+new commits are available, it benchmarks them one at a time in
+chronological order.
 
-## Data pipeline
-
-A dedicated benchmark server periodically checks OSCAR for new commits and
-benchmarks them in chronological order. It writes `data/timing_summary.json`
-and commits that file here; this repository does not fetch benchmark data.
-
-Each data update adds its source CSV under `data/raw/` and regenerates
-`data/timing_summary.json`. The raw files are retained as producer inputs and
-as the reproducible archive behind the generated summary.
-
-Pushing to `main` deploys only the dashboard, favicon, domain configuration,
-and summary JSON to GitHub Pages. The raw benchmark exports remain in Git but
-are intentionally excluded from the public Pages artifact.
+The benchmarking process produces timing data, which are committed to
+this repository. Since the dashboard is hosted as a GitHub Pages site,
+pushing the updated data automatically updates the website.
 
 ## License
 
-[MIT](LICENSE)
+MIT
