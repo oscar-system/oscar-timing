@@ -721,7 +721,7 @@
                 <option value="365">Last 365 days</option>
                 <option value="0">All time</option>
             </select>
-            <button class="btn btn-primary" id="btn-reset-zoom" onclick="resetZoom()" aria-label="Reset chart" style="display: none;">Reset chart</button>
+            <button class="btn btn-primary" id="btn-reset-zoom" onclick="resetZoom()" aria-label="Reset view" style="display: none;">Reset view</button>
             <select class="time-select" id="line-type" onchange="setLineType(this.value)" aria-label="Line type">
                 <option value="raw">Raw data</option>
                 <option value="7" selected>7-day avg</option>
@@ -920,6 +920,7 @@
             checkbox.indeterminate = selectedVisible > 0 && selectedVisible < visible.length;
             document.getElementById('job-count').textContent =
                 `${selectedVisible} of ${visible.length} jobs selected in view (${jobNameList.length} total)`;
+            updateResetButton();
         }
 
         function getStatsJobNames() {
@@ -1228,7 +1229,7 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             jobNameList = Object.keys(data.jobs).sort();
         }
 
-        /** Encode names so links remain valid when jobs are added or reordered. */
+        /** Store selections by name so they survive additions and reordering. */
         function encodeSelection() {
             return 'n' + [...selectedJobs].sort()
                 .map(name => encodeURIComponent(name).replace(/!/g, '%21')).join('!');
@@ -1265,7 +1266,7 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                 Number.isFinite(values[1] - values[0]) ? values : null;
         }
 
-        function updateURL() {
+        function updateURL(saveSelection = true) {
             const url = new URL(window.location);
             const search = jobFilterText.trim();
             if (search) {
@@ -1273,7 +1274,9 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             } else {
                 url.searchParams.delete('q');
             }
-            url.searchParams.set('s', encodeSelection());
+            // Keep shared URLs in the compact, legacy index format.
+            url.searchParams.set('s', 'i' + jobNameList.flatMap((name, index) =>
+                selectedJobs.has(name) ? [index] : []).join('_'));
 
             if (selectedJuliaVersion !== 'all') url.searchParams.set('v', selectedJuliaVersion);
             else url.searchParams.delete('v');
@@ -1307,7 +1310,8 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             url.searchParams.delete('st');
 
             history.replaceState(null, '', url);
-            saveToLocalStorage();
+            updateResetButton();
+            if (saveSelection) saveToLocalStorage();
         }
 
         function saveToLocalStorage() {
@@ -1366,7 +1370,6 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                     customXMin = xMin;
                     customXMax = xMax;
                     document.getElementById('time-range').value = 'custom';
-                    document.getElementById('btn-reset-zoom').style.display = '';
                 }
             }
 
@@ -1377,7 +1380,6 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                 if (yMin >= 0) {
                     customYMin = yMin;
                     customYMax = yMax;
-                    document.getElementById('btn-reset-zoom').style.display = '';
                 }
             }
 
@@ -1416,7 +1418,6 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             customYMax = null;
             const select = document.getElementById('time-range');
             select.value = timeRangeDays;
-            document.getElementById('btn-reset-zoom').style.display = 'none';
         }
 
         function setCustomZoom(xMin, xMax, yMin, yMax) {
@@ -1427,7 +1428,6 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             // Update dropdown to show "Custom"
             const select = document.getElementById('time-range');
             select.value = 'custom';
-            document.getElementById('btn-reset-zoom').style.display = '';
             updateURL();
         }
 
@@ -1447,10 +1447,35 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             updateStatsTable();
         }
 
+        function updateResetButton() {
+            const changed = customXMin !== null || customYMin !== null ||
+                timeRangeDays !== DEFAULT_TIME_RANGE || lineType !== DEFAULT_LINE_TYPE ||
+                selectedJuliaVersion !== 'all' || jobFilterText !== '' ||
+                statsTableSortColumn !== 'median' || statsTableSortAsc ||
+                document.getElementById('stats-wrapper').style.height !== '' ||
+                jobNameList.some(name => selectedJobs.has(name) !== isDefaultSelectedJob(name));
+            document.getElementById('btn-reset-zoom').style.display = changed ? '' : 'none';
+        }
+
         function resetZoom() {
+            clearTimeout(jobFilterTimer);
+            jobFilterTimer = null;
+            jobFilterText = '';
+            document.getElementById('job-filter').value = '';
+            document.getElementById('job-filter-clear').style.display = 'none';
+            selectedJuliaVersion = 'all';
+            document.getElementById('julia-version').value = selectedJuliaVersion;
+            lineType = DEFAULT_LINE_TYPE;
+            document.getElementById('line-type').value = lineType;
+            timeRangeDays = DEFAULT_TIME_RANGE;
+            selectedJobs = new Set(jobNameList.filter(isDefaultSelectedJob));
+            statsTableSortColumn = 'median';
+            statsTableSortAsc = false;
+            const wrapper = document.getElementById('stats-wrapper');
+            wrapper.style.height = '';
+            wrapper.style.flex = '';
             clearCustomZoom();
-            updateChart();
-            updateStatsTable();
+            refreshAllUI();
             updateURL();
         }
 
@@ -1954,7 +1979,8 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             handle.addEventListener('mousedown', (e) => {
                 e.preventDefault();
                 startY = e.clientY;
-                startHeight = wrapper.offsetHeight;
+                startHeight = wrapper.getBoundingClientRect().height;
+                wrapper.style.height = startHeight + 'px';
                 wrapper.style.flex = '0 0 auto';
                 document.addEventListener('mousemove', onMouseMove);
                 document.addEventListener('mouseup', onMouseUp);
@@ -1973,6 +1999,7 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                 document.removeEventListener('mouseup', onMouseUp);
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
+                updateResetButton();
             }
 
         })();
@@ -1991,7 +2018,7 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                 toggleShortcutsHelp();
             } else if (e.key === 'r') {
                 e.preventDefault();
-                if (customXMin !== null || customYMin !== null) resetZoom();
+                resetZoom();
             }
         });
 
@@ -2295,7 +2322,14 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                     }
                 }
 
+                // A shared zoom may no longer contain any recorded runs.
+                const plotted = getPlottedJobNames();
+                if (customXMin !== null && plotted.length > 0 && !plotted.some(name =>
+                    filterRunsByDate(data.jobs[name].recent, new Date(customXMin), new Date(customXMax)).length)) {
+                    clearCustomZoom();
+                }
                 refreshAllUI();
+                updateURL(false);
                 document.getElementById("chart-loading").style.display = "none";
             } catch (error) {
                 console.error("Failed to load data:", error);
