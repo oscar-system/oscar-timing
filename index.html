@@ -1274,9 +1274,15 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             } else {
                 url.searchParams.delete('q');
             }
-            // Keep shared URLs in the compact, legacy index format.
-            url.searchParams.set('s', 'i' + jobNameList.flatMap((name, index) =>
-                selectedJobs.has(name) ? [index] : []).join('_'));
+            // The default selection is implied; only serialize a custom selection.
+            const hasCustomSelection = jobNameList.some(name =>
+                selectedJobs.has(name) !== isDefaultSelectedJob(name));
+            if (hasCustomSelection) {
+                url.searchParams.set('s', 'i' + jobNameList.flatMap((name, index) =>
+                    selectedJobs.has(name) ? [index] : []).join('_'));
+            } else {
+                url.searchParams.delete('s');
+            }
 
             if (selectedJuliaVersion !== 'all') url.searchParams.set('v', selectedJuliaVersion);
             else url.searchParams.delete('v');
@@ -2306,7 +2312,9 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                 selectedJobs.clear();
                 let hasSelection = applyURLParams();
 
-                if (!hasSelection) {
+                const hasURLState = ['q', 'v', 't', 'x', 'y', 'l'].some(key =>
+                    new URLSearchParams(window.location.search).has(key));
+                if (!hasSelection && !hasURLState) {
                     const storedSelection = decodeSelection(loadFromLocalStorage());
                     if (storedSelection) {
                         hasSelection = true;
