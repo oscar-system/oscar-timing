@@ -245,6 +245,20 @@
             touch-action: none; /* Let Chart.js handle all touch events */
             max-width: 100% !important;
         }
+        .chart-empty {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            pointer-events: none;
+        }
+        .chart-empty[hidden] { display: none; }
+        .chart-empty span {
+            padding: 12px;
+            background: var(--color-canvas-default);
+            color: var(--color-fg-muted);
+            text-align: center;
+        }
 
         /* Stats bar */
         .stats-wrapper {
@@ -272,6 +286,12 @@
         }
         .resize-handle:hover { background: var(--color-neutral-muted); }
         .resize-handle:hover::after { opacity: 1; }
+        .stats-summary {
+            padding: 6px 12px;
+            background: var(--color-canvas-subtle);
+            color: var(--color-fg-muted);
+            font-size: 12px;
+        }
         .stats-bar {
             display: flex;
             gap: 1px;
@@ -787,10 +807,12 @@
                 <div class="chart-wrapper">
                     <div class="loading-overlay" id="chart-loading"><span class="loading">Loading chart data...</span></div>
                     <canvas id="timing-chart" role="img" aria-label="CI timing chart"></canvas>
+                    <div class="chart-empty" id="chart-empty" role="status" hidden><span></span></div>
                 </div>
             </div>
             <div class="stats-wrapper" id="stats-wrapper">
                 <div class="resize-handle" id="resize-handle" role="separator" aria-orientation="horizontal" aria-label="Resize stats panel"></div>
+                <div class="stats-summary" id="job-count" role="status"></div>
                 <div class="stats-bar">
                     <table role="table" aria-label="Job statistics">
                         <thead id="stats-thead">
@@ -895,7 +917,7 @@
         }
 
         function toggleAllVisibleStatsJobs(checked) {
-            for (const name of getVisibleJobNames()) {
+            for (const name of getStatsJobNames()) {
                 if (checked) {
                     selectedJobs.add(name);
                 } else {
@@ -911,10 +933,23 @@
         function syncStatsSelectAllCheckbox() {
             const checkbox = document.getElementById('stats-select-all');
             if (!checkbox) return;
-            const visible = getVisibleJobNames();
+            const visible = getStatsJobNames();
             const selectedVisible = visible.filter(name => selectedJobs.has(name)).length;
+            checkbox.disabled = visible.length === 0;
             checkbox.checked = visible.length > 0 && selectedVisible === visible.length;
             checkbox.indeterminate = selectedVisible > 0 && selectedVisible < visible.length;
+            document.getElementById('job-count').textContent =
+                `${selectedVisible} of ${visible.length} jobs selected in view (${jobNameList.length} total)`;
+        }
+
+        function getStatsJobNames() {
+            return Array.from(document.querySelectorAll('#stats-tbody tr[data-job]'), row => row.dataset.job);
+        }
+
+        function isDefaultSelectedJob(name) {
+            const normalizedName = convertEmojiText(name).toLowerCase();
+            return !normalizedName.includes('test 1.12 short') &&
+                   !normalizedName.includes('test 1.12 long');
         }
 
         // Buildkite emoji mapping - use their actual images
@@ -1239,7 +1274,10 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             }
             if (!param.startsWith('n')) return null;
             try {
-                return { names: param.slice(1) ? param.slice(1).split('!').map(decodeURIComponent) : [] };
+                if (param === 'n') return { names: [] };
+                const names = param.slice(1).split('!').map(decodeURIComponent)
+                    .filter(name => Object.hasOwn(data.jobs, name));
+                return names.length ? { names } : null;
             } catch {
                 return null;
             }
@@ -1251,7 +1289,8 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             const parts = param.split(param.includes(',') ? ',' : '.');
             if (parts.length !== 2 || parts.some(part => part.trim() === '')) return null;
             const values = parts.map(Number);
-            return values.every(Number.isFinite) && values[0] < values[1] ? values : null;
+            return values.every(Number.isFinite) && values[0] < values[1] &&
+                Number.isFinite(values[1] - values[0]) ? values : null;
         }
 
         function updateURL() {
@@ -1366,6 +1405,7 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                 if (yMin >= 0) {
                     customYMin = yMin;
                     customYMax = yMax;
+                    document.getElementById('btn-reset-zoom').style.display = '';
                 }
             }
 
@@ -1429,14 +1469,17 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             setCustomZoom(
                 Math.round(xAxis.min),
                 Math.round(xAxis.max),
-                Math.round(yAxis.min),
-                Math.round(yAxis.max)
+                yAxis.min,
+                yAxis.max
             );
+            updateStatsTable();
+            updateChartEmptyState();
         }
 
         function resetZoom() {
             clearCustomZoom();
             updateChart();
+            updateStatsTable();
             updateURL();
         }
 
@@ -1525,7 +1568,24 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
             return result;
         }
 
+        function updateChartEmptyState() {
+            const visible = getVisibleJobNames();
+            const plotted = visible.filter(name => selectedJobs.has(name));
+            const { min, max } = getVisibleTimeRange();
+            const hasRuns = plotted.some(name => data.jobs[name].recent.some(run => {
+                const date = new Date(run.date);
+                return (!min || date >= min) && (!max || date <= max);
+            }));
+            const message = visible.length === 0 ? 'No matching jobs.' :
+                plotted.length === 0 ? 'No jobs selected. Select jobs in the table below.' :
+                !hasRuns ? 'No timing data in this time range. Choose another time range or reset the chart.' : '';
+            const empty = document.getElementById('chart-empty');
+            empty.querySelector('span').textContent = message;
+            empty.hidden = message === '';
+        }
+
         function updateChart() {
+            updateChartEmptyState();
             const selectedArray = getPlottedJobNames();
             if (selectedArray.length === 0) {
                 hideRegressionLine();
@@ -1870,7 +1930,9 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                                 ];
 
                                 // Find smallest step that gives <= 12 major ticks
-                                const config = niceStepsWithMinor.find(c => rangeMs / c.step <= 12) || { step: 30*DAY, minor: 7*DAY };
+                                const config = niceStepsWithMinor.find(c => rangeMs / c.step <= 12);
+                                // Keep Chart.js ticks for ranges beyond our custom intervals.
+                                if (!config) return;
                                 const step = config.step;
                                 const minorStep = config.minor;
 
@@ -1935,13 +1997,14 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                                 const range = axis.max - axis.min;
                                 // Pick step size for nice round numbers
                                 const niceSteps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
-                                let step = niceSteps.find(s => range / s <= 10) || 7200;
+                                const step = niceSteps.find(s => range / s <= 10);
+                                if (!step || axis.min + step === axis.min || axis.max + step === axis.max) return;
                                 const minTick = Math.ceil(axis.min / step) * step;
                                 const ticks = [];
                                 for (let v = minTick; v <= axis.max; v += step) {
                                     ticks.push({ value: v });
                                 }
-                                axis.ticks = ticks;
+                                if (ticks.length > 0) axis.ticks = ticks;
                             }
                         },
                     },
@@ -2232,6 +2295,10 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                 jobStats.push(stats);
             }
 
+            if (jobStats.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="loading">No timing data in this time range. Choose another time range or reset the chart.</td></tr>';
+            }
+
             // Sort based on current sort column
             jobStats.sort((a, b) => {
                 let cmp = 0;
@@ -2450,12 +2517,21 @@ ${meaningful ? 'Meaningful trend' : 'Below the display threshold'}`;
                 populateJobSelector();
                 updateJuliaVersionFilterUI();
                 selectedJobs.clear();
-                const hasSelection = applyURLParams();
+                let hasSelection = applyURLParams();
 
                 if (!hasSelection) {
                     const storedSelection = decodeSelection(loadFromLocalStorage());
-                    for (const name of storedSelection?.names ?? []) {
-                        if (data.jobs[name]) selectedJobs.add(name);
+                    if (storedSelection) {
+                        hasSelection = true;
+                        for (const name of storedSelection.names) {
+                            selectedJobs.add(name);
+                        }
+                    }
+                }
+
+                if (!hasSelection) {
+                    for (const name of jobNameList) {
+                        if (isDefaultSelectedJob(name)) selectedJobs.add(name);
                     }
                 }
 
